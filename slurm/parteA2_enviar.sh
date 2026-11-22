@@ -2,12 +2,21 @@
 # =============================================================================
 #  parteA2_enviar.sh - Tarea A.2: escalamiento fuerte con OpenMP (memoria compartida).
 #
-#  1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24 (hasta p_max), 3
-#  repeticiones, en UNA sola cadena (--dependency=afterany). t(1) se toma de las
-#  3 corridas con p = 1 de la A.1 (1 proceso y 1 hilo: es exactamente el mismo calculo).
-#  La forma de pedir los recursos, el entorno de hilos (OPENBLAS_NUM_THREADS,
-#  OMP_WAIT_POLICY) y el limite de tiempo de cada p salen del diagnostico
-#  (datos/parteA2_config.txt, escrito por analisis/parteA2_hilos.py).
+#  1 proceso MPI con p hilos OpenMP, p = 1, 2, 4, 8, 12, 16, 24, 3 repeticiones, en
+#  UNA sola cadena (--dependency=afterany), con orden intercalado.
+#
+#  Carga fija de 4 iteraciones SCF (NELM = 4), no el SCF completo: el diagnostico
+#  (ronda 2, datos/parteA2_hilos.md) mostro que con 24 hilos una iteracion tarda MAS
+#  que con 1 hilo, asi que cada corrida completa con p hilos costaria casi p x 30 min
+#  (unas 110 h-nucleo el barrido). Con 4 iteraciones el barrido cuesta unas 31 h-nucleo.
+#  t(1) se mide con la misma carga (p = 1, tambien 3 veces). Para comparar con MPI se
+#  usa el tiempo por iteracion (LOOP del OUTCAR), que la A.1 tambien tiene.
+#
+#  Entorno (ronda 2): OPENBLAS_NUM_THREADS=1 (E1; igual de rapido que sin fijarlo y
+#  asegura que solo VASP lanza hilos) y la espera de libgomp por defecto (la espera
+#  pasiva fue 50-70 % mas lenta). Nucleos pedidos como en la A.1
+#  (--ntasks=p --hint=nomultithread) y paso de srun elegido por su mascara real
+#  (PASO_MODO=auto, ver geometria_pasos.txt de cada corrida).
 #
 #  Uso (desde la carpeta del repositorio):
 #      bash slurm/parteA2_enviar.sh               # envia el barrido
@@ -20,16 +29,16 @@ cd "$REPO" || exit 1
 PARTICION="${PARTICION:-phys_fast}"
 REG=logs/jobs_A2.txt
 EXCLUIR=datos/parteA2_excluidas.txt
-VARF=datos/parteA2_config.txt
 MAX_PRIMERA="${MAX_PRIMERA:-420}"     # segundos; solo se cambia en pruebas
-COSTO_MAX=40
+NELM_FIJO=4
+LIMITE=00:25:00
 NODO_MALO=granado-compute-18
-ORDEN_R1="2 4 8 12 16 24"
-ORDEN_R2="24 16 12 8 4 2"
-ORDEN_R3="8 16 2 24 4 12"
+ORDEN_R1="1 2 4 8 12 16 24"
+ORDEN_R2="24 16 12 8 4 2 1"
+ORDEN_R3="8 16 1 24 4 12 2"
+VARS_ENT=",NELM_DIAG=$NELM_FIJO,BLAS_HILOS=1,PASO_MODO=auto,MAX_PRIMERA_ITER=$MAX_PRIMERA"
 
-tiempo_p() { grep "^limite_p$1=" "$VARF" | cut -d= -f2; }
-falla()    { echo "  [FALLA] $1"; echo; echo "Mandame una captura."; exit 1; }
+falla() { echo "  [FALLA] $1"; echo; echo "Mandame una captura."; exit 1; }
 
 case "$PARTICION" in phys_fast|phys_general) ;; *) falla "particion no permitida por el examen: $PARTICION" ;; esac
 MODO=todas
@@ -40,37 +49,19 @@ case "${1:-}" in
 esac
 
 echo "=== Comprobaciones previas ==="
-[ -s "$VARF" ] || falla "falta $VARF: primero la ronda 2 del diagnostico (bash slurm/parteA2_hilos.sh y python3 analisis/parteA2_hilos.py)"
-git ls-files --error-unmatch "$VARF" >/dev/null 2>&1 || falla "$VARF no esta en Git: corre  python3 analisis/parteA2_hilos.py --guardar"
-git diff --quiet HEAD -- "$VARF" || falla "$VARF cambio despues del commit: corre  python3 analisis/parteA2_hilos.py --guardar"
-VAR=$(grep '^variante=' "$VARF" | cut -d= -f2)
-PMAX=$(grep '^p_max=' "$VARF" | cut -d= -f2)
-ENT=$(grep '^entorno=' "$VARF" | cut -d= -f2)
-BLAS=$(grep '^blas_hilos=' "$VARF" | cut -d= -f2)
-ESPERA=$(grep '^espera_omp=' "$VARF" | cut -d= -f2)
-COSTO=$(grep '^costo_estimado_h=' "$VARF" | cut -d= -f2)
-MODO_PASO=$(grep '^paso_modo=' "$VARF" | cut -d= -f2)
-[ "$VAR" = "C" ] || falla "variante desconocida en $VARF: '$VAR' (vuelve a correr python3 analisis/parteA2_hilos.py --guardar)"
-[ "$MODO_PASO" = "auto" ] || falla "paso_modo invalido en $VARF"
-echo "$PMAX" | grep -qE '^[0-9]+$' || falla "p_max invalido en $VARF"
-for p in 2 4 8 12 16 24; do
-    [ "$p" -le "$PMAX" ] || continue
-    tiempo_p "$p" | grep -qE '^[0-9]{2}:[0-9]{2}:[0-9]{2}$' || falla "falta limite_p$p en $VARF"
-done
-awk -v c="${COSTO:-999}" -v m="$COSTO_MAX" 'BEGIN { exit !(c + 0 <= m) }' || falla "el barrido costaria ${COSTO:-?} h-nucleo (mas de $COSTO_MAX): mandame una captura antes de enviarlo"
-VARS_ENT=",MAX_PRIMERA_ITER=$MAX_PRIMERA,PASO_MODO=auto"
-[ -n "$BLAS" ]       && VARS_ENT="$VARS_ENT,BLAS_HILOS=$BLAS"
-[ -n "$ESPERA" ]     && VARS_ENT="$VARS_ENT,ESPERA_OMP=$ESPERA"
 for f in INCAR KPOINTS POSCAR; do
     [ -s "entradas/caso_base/$f" ] || falla "falta entradas/caso_base/$f"
 done
 [ -s entradas/POTCAR ] || falla "falta entradas/POTCAR"
 [ -s lib/libfftw3_omp.so.3 ] && [ -s lib/libfftw3.so.3 ] || falla "faltan las librerias de lib/"
 grep -q "PASO_MODO" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior (descomprime el paquete nuevo y corre bash slurm/parteA2_preparar.sh)"
+grep -q "carga fija de 4 iteraciones" analisis/parteA2_resumen.py || falla "analisis/parteA2_resumen.py es una version anterior (descomprime el paquete nuevo)"
 if [ -n "$(git status --porcelain -- entradas slurm analisis README.md)" ]; then
     git status --short -- entradas slurm analisis README.md
     falla "hay cambios sin guardar en Git (corre primero: bash slurm/parteA2_preparar.sh)"
 fi
+git ls-files --error-unmatch datos/parteA2_hilos.md >/dev/null 2>&1 \
+    || falla "falta guardar el diagnostico: corre primero  python3 analisis/parteA2_hilos.py --guardar"
 mkdir -p logs corridas
 if [ "$MODO" = "todas" ] && [ -s "$REG" ]; then
     falla "la A.2 ya se envio (ver $REG). Estado: bash slurm/parteA2_estado.sh  |  reenviar lo que falte: bash slurm/parteA2_enviar.sh --faltantes"
@@ -78,14 +69,16 @@ fi
 if [ "$MODO" = "faltantes" ] && [ ! -s "$REG" ]; then
     falla "todavia no se ha enviado la A.2: usa  bash slurm/parteA2_enviar.sh"
 fi
-echo "  [OK] variante $VAR (p hasta $PMAX), entorno $ENT, caso base, POTCAR, librerias y Git en orden"
+if command -v squeue >/dev/null 2>&1 && [ -n "$(squeue -h -u "$(id -un)" -n ex_A2h_E1_p4,ex_A2h_E3_p4,ex_A2h_E2_p4,ex_A2h_E0_p4,ex_A2h_E1_p24,ex_A2h_E3_p24 -o %i 2>/dev/null)" ]; then
+    falla "todavia hay corridas del diagnostico en cola: espera a que terminen (bash slurm/parteA2_estado.sh)"
+fi
+echo "  [OK] caso base, POTCAR, librerias, Git y diagnostico guardado en orden"
 
 # ---- plan
 PLAN=""
 for r in 1 2 3; do
     eval "ORD=\$ORDEN_R$r"
     for p in $ORD; do
-        [ "$p" -le "$PMAX" ] || continue
         if [ "$MODO" = "faltantes" ]; then
             hecho=0
             while read -r P R ID F H; do
@@ -113,14 +106,13 @@ HASH=$(git rev-parse --short HEAD)
 echo
 echo "Se enviaran $N corridas en una sola cadena (r = repeticion, p = hilos OpenMP de 1 proceso):"
 echo "  $(echo $PLAN | sed 's/\([0-9]*\):\([0-9]*\)/r\1:p\2/g')"
-echo "  nucleos como en la A.1 (--ntasks=p --hint=nomultithread) y paso de srun elegido por su mascara real"
-echo "  entorno $ENT (OPENBLAS_NUM_THREADS=${BLAS:-sin fijar}, OMP_WAIT_POLICY=${ESPERA:-sin fijar})"
+echo "  carga fija: 4 iteraciones SCF (NELM = $NELM_FIJO) del caso base; t(1) con la misma carga"
+echo "  nucleos como en la A.1 (--ntasks=p --hint=nomultithread), paso de srun elegido por su mascara real"
+echo "  OPENBLAS_NUM_THREADS=1, espera de OpenMP por defecto; limite $LIMITE por corrida"
 echo "  particion $PARTICION, commit $HASH ${EXCL:+(se excluye $NODO_MALO)}"
-echo "  t(1) se toma de las 3 corridas con p = 1 de la A.1 (mismo calculo: 1 proceso, 1 hilo)"
 if [ "$MODO" = "todas" ]; then
-    echo "  costo estimado (proyeccion de la ronda 2): ${COSTO} h-nucleo"
+    echo "  costo estimado: unas 31 h-nucleo; duracion: unas 3.5 h mas la espera en cola"
 fi
-echo "  limites de tiempo: $(for p in 2 4 8 12 16 24; do [ "$p" -le "$PMAX" ] && printf "p%s=%s " "$p" "$(tiempo_p "$p")"; done)"
 read -r -p "Escribe s y Enter para enviar: " RESP
 case "$RESP" in s|S) ;; *) echo "No se envio nada."; exit 0 ;; esac
 
@@ -133,11 +125,11 @@ if [ "$MODO" = "faltantes" ]; then
 fi
 for item in $PLAN; do
     r="${item%%:*}"; p="${item##*:}"
-    OPTS="--ntasks=$p --cpus-per-task=1 --hint=nomultithread"
     DEP=""
     [ -n "$PREV" ] && DEP="--dependency=afterany:$PREV"
-    ID=$(sbatch --parsable --job-name="ex_A2_p${p}_r${r}" --partition="$PARTICION" --nodes=1 $OPTS \
-                --mem=8G --time="$(tiempo_p "$p")" $EXCL $DEP \
+    ID=$(sbatch --parsable --job-name="ex_A2_p${p}_r${r}" --partition="$PARTICION" --nodes=1 \
+                --ntasks="$p" --cpus-per-task=1 --hint=nomultithread \
+                --mem=8G --time="$LIMITE" $EXCL $DEP \
                 --export=ALL,CASO=caso_base,GIT_HASH="$HASH",HILOS="$p"$VARS_ENT slurm/vasp_job.sh)
     [ -n "$ID" ] || falla "sbatch no devolvio un numero de job para r$r p=$p (las anteriores si quedaron enviadas; revisa con bash slurm/parteA2_estado.sh)"
     ID="${ID%%;*}"

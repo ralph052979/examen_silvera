@@ -31,6 +31,7 @@ for f in slurm/vasp_job.sh slurm/parteA2_diagnostico.sh slurm/parteA2_hilos.sh s
     [ -s "$f" ] || falla "falta $f: el paquete no se descomprimio dentro de examen_silvera (ver la guia)"
 done
 grep -q "PASO_MODO" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior: descomprime de nuevo el paquete"
+grep -q "carga fija de 4 iteraciones" analisis/parteA2_resumen.py || falla "analisis/parteA2_resumen.py es una version anterior: descomprime de nuevo el paquete"
 CR=$(grep -l $'\r' slurm/*.sh analisis/*.py README.md 2>/dev/null)
 if [ -n "$CR" ]; then
     sed -i 's/\r$//' $CR
@@ -55,8 +56,8 @@ leer() { awk -F= -v t="$1" '$1 ~ "^[ \t]*"t"[ \t]*$" {split($2,a,"#"); gsub(/[ \
 ok "caso base K7 sin cambios (NCORE = 1, KPAR = 1)"
 
 # -----------------------------------------------------------------------------
-paso "3/5  t(1) de la A.1"
-[ -s logs/jobs_A1.txt ] || falla "no existe logs/jobs_A1.txt: la A.2 usa las corridas con p = 1 de la A.1"
+paso "3/5  Corridas de la A.1 (comparacion por iteracion con MPI)"
+[ -s logs/jobs_A1.txt ] || falla "no existe logs/jobs_A1.txt: la A.2 se compara con las corridas de la A.1"
 N1=0
 while read -r P R ID F H; do
     [ "$P" = "1" ] || continue
@@ -64,7 +65,7 @@ while read -r P R ID F H; do
     [ "$E" = "OK" ] && N1=$((N1 + 1))
 done < logs/jobs_A1.txt
 [ "$N1" -ge 1 ] || falla "no hay corridas con p = 1 terminadas en la A.1"
-ok "$N1 corridas con p = 1 de la A.1 disponibles como t(1)"
+ok "corridas de la A.1 disponibles ($N1 con p = 1)"
 
 # -----------------------------------------------------------------------------
 paso "4/5  POTCAR y librerias"
@@ -100,15 +101,19 @@ git add slurm analisis README.md || falla "git add fallo"
 if git diff --cached --quiet; then
     ok "nada nuevo que guardar (los scripts ya estaban en Git)"
 else
-    git commit -q -m "Parte A.2: paso de srun elegido por su mascara real (intento 2 de la ronda 2)" || falla "git commit fallo"
+    git commit -q -m "Parte A.2: barrido OpenMP con carga fija de 4 iteraciones y comparacion por iteracion con MPI" || falla "git commit fallo"
     ok "commit $(git rev-parse --short HEAD)"
 fi
 [ -z "$(git status --porcelain -- entradas slurm analisis README.md)" ] || falla "quedaron cambios sin guardar en Git"
 
 echo
 echo "================================================================"
-if [ -s logs/jobs_A2h2.txt ]; then
-    echo " PREPARACION A.2 COMPLETA. El intento 2 de la ronda 2 ya se envio:  bash slurm/parteA2_estado.sh"
+if [ -s logs/jobs_A2.txt ]; then
+    echo " PREPARACION A.2 COMPLETA. El barrido ya se envio:  bash slurm/parteA2_estado.sh"
+elif [ -s logs/jobs_A2h2.txt ]; then
+    echo " PREPARACION A.2 COMPLETA. Siguientes pasos:"
+    echo "   python3 analisis/parteA2_hilos.py --guardar"
+    echo "   bash slurm/parteA2_enviar.sh"
 elif [ -s logs/jobs_A2h.txt ]; then
     echo " PREPARACION A.2 COMPLETA. Siguiente paso (ronda 2, intento 2):  bash slurm/parteA2_hilos.sh"
 elif [ -s logs/jobs_A2d.txt ]; then

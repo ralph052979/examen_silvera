@@ -104,13 +104,15 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
    **activos** (≥ 50 % de un CPU) (`hilos_crudo.txt`, `hilos.txt`). Si hay más hilos activos que
    núcleos, la corrida se marca como sobresuscrita. (El primer monitor buscaba el proceso con `ps` y
    `/proc/<pid>/environ` y en la ronda 1 de la A.2 no obtuvo ninguna muestra.)
-10. **OpenMP con 1 hilo por CPU asignado (A.2, ronda 1, 2026-11-22).** Con p CPUs para p hilos, ninguna
-    corrida terminó 4 iteraciones en 20 min (con 1 hilo bastan unos 7 min). Con 2 hilos de hardware por
-    núcleo (variante D, 8 CPUs para 4 hilos) sí terminó, pero cada iteración tardó 127–133 s, frente a
-    94–97 s con 1 hilo, y el tiempo de CPU fue 4,9 veces el real con 4 hilos. Durante la corrida C24,
-    `ps -L` mostró 25 hilos de VASP trabajando con `OMP_NUM_THREADS=24`. Hipótesis que prueba la ronda 2:
-    OpenBLAS lanza un hilo propio que compite con los de OpenMP, y como libgomp espera girando, quitarle
-    el núcleo a un solo hilo frena a todos. Resultado en `datos/parteA2_hilos.md`.
+10. **OpenMP: un hilo de hardware por núcleo, o nada (A.2, 2026-11-22).** En la ronda 1, las corridas
+    con p CPUs para p hilos no terminaron 4 iteraciones en 20 min; durante C24, `ps -L` mostró los 24 hilos
+    de OpenMP en 12 núcleos físicos (2 por núcleo) y un hilo más trabajando. Con 4 núcleos pero con sus
+    2 hilos de hardware en la máscara (D4), cada iteración tardó 127–133 s. En la ronda 2,
+    con 1 hilo de hardware por núcleo, la misma iteración con 4 hilos tardó 69–70 s y trabajaron exactamente
+    4 hilos. `OPENBLAS_NUM_THREADS=1` no cambia nada (E0 = 69,1 s, E1 = 69,8 s): la hipótesis de un hilo
+    propio de OpenBLAS no se confirmó (la librería no enlaza libgomp). La espera pasiva
+    (`OMP_WAIT_POLICY=PASSIVE`) es alrededor de 50 % más lenta con 4 hilos y 67 % con 24. Detalle en
+    `datos/parteA2_diagnostico.md` y `datos/parteA2_hilos.md`.
 11. **Salida de VASP con bufer.** VASP compilado con gfortran escribe OSZICAR y OUTCAR en bloques y los
     vacía al terminar: una corrida que Slurm corta los deja vacíos o incompletos. `vasp_job.sh` fija
     `GFORTRAN_UNBUFFERED_PRECONNECTED=y`, de modo que `vasp.out` muestra cada iteración SCF al momento,
@@ -147,14 +149,14 @@ examen_silvera/
     parteA2_preparar.sh             Tarea A.2: verifica y guarda los scripts en Git
     parteA2_diagnostico.sh          Tarea A.2, ronda 1: 6 corridas cortas (como pedir los nucleos)
     parteA2_hilos.sh                Tarea A.2, ronda 2: hilos de OpenBLAS y espera de OpenMP
-    parteA2_enviar.sh               Tarea A.2: envia el barrido OpenMP en una cadena (o --faltantes)
+    parteA2_enviar.sh               Tarea A.2: barrido OpenMP con carga fija (4 iteraciones), en una cadena
     parteA2_estado.sh               Tarea A.2: estado de las dos rondas y del barrido
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
     parteA2_diagnostico.py          Tarea A.2, ronda 1: mascaras (tambien de las cortadas) y tiempos
-    parteA2_hilos.py                Tarea A.2, ronda 2: hilos activos, tiempos, entorno elegido y costo
-    parteA2_resumen.py              Tarea A.2: t(p) con media y desviacion estandar, S(p), E(p)
+    parteA2_hilos.py                Tarea A.2, ronda 2: hilos activos, tiempos por iteracion y conclusion
+    parteA2_resumen.py              Tarea A.2: t(p), S(p), E(p) y comparacion por iteracion con MPI (A.1)
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I
   reporte/                          fuentes .tex y PDF
@@ -237,42 +239,46 @@ de `vasp.err` y tiempos por iteración en `datos/parteA2_diagnostico.md`.
 
 **Paso 2, diagnóstico ronda 2: hilos de OpenBLAS y espera de OpenMP.** El intento 1 usó la
 variante B: la máscara de E1 con p = 4 tuvo 2 núcleos físicos y la corrida se detuvo al arrancar
-(las demás, igual u omitidas). El intento 2 pide los núcleos como en la A.1 y elige el paso de `srun`
-por su máscara real (hallazgo 1). Diseño 2 × 2 con p = 4, en una sola cadena:
+(las demás, igual u omitidas). El intento 2 pidió los núcleos como en la A.1 y eligió el paso de `srun`
+por su máscara real (hallazgo 1; en todas las corridas sirvió `--hint=nomultithread`). Diseño 2 × 2 con
+p = 4 y, con p = 24, las que pasaron con p = 4; en una sola cadena:
 
-| Entorno | Variables | Para qué |
-|---|---|---|
-| E0 | las de la ronda 1 (con foto de las pilas de los hilos con `gdb`) | control: reproduce el problema |
-| E1 | `OPENBLAS_NUM_THREADS=1` | OpenBLAS sin hilos propios (lo que pide su documentación si la aplicación ya usa hilos) |
-| E2 | `OMP_WAIT_POLICY=PASSIVE` | los hilos de OpenMP esperan durmiendo en vez de girar |
-| E3 | ambas | |
+| Entorno | Variables | t/iteración, p = 4 | t/iteración, p = 24 |
+|---|---|---|---|
+| E0 | las de la ronda 1 (control) | 69,1 s | — |
+| E1 | `OPENBLAS_NUM_THREADS=1` | 69,8 s | 129,6 s |
+| E2 | `OMP_WAIT_POLICY=PASSIVE` | 103,9 s | — |
+| E3 | ambas | 103,2 s | 216,2 s (no terminó 4 iteraciones en 15 min) |
 
-Con p = 24 se corren E1 y E3, cada una solo si pasó con p = 4. Se elige E1 si pasa con p = 4 y 24
-(no cambia nada más que OpenBLAS, que en la A.1 ya usaba 1 hilo y la política de espera queda la de
-libgomp); si no, E3. La tabla queda
-en `datos/parteA2_hilos.md` y el entorno elegido, con el costo proyectado y el límite de tiempo de cada
-p, en `datos/parteA2_config.txt`.
+Con 1 hilo (A.1, p = 1), cada una de las primeras 4 iteraciones tarda 95,8 s: con OpenMP la iteración
+se acelera 1,37 veces con 4 hilos y es **más lenta** con 24 (0,74). El binario de VASP no contiene la
+cadena `fftlib` (`cadena_fftlib_en_vasp=0`), es decir, no se compiló con fftlib; su documentación advierte que sin fftlib el costo de planificar las FFT con
+hilos se vuelve prohibitivo con muchos hilos, y que con OpenMP los hilos reemplazan a NCORE (se reparten
+el trabajo de cada orbital; nuestra malla FFT es de 32×32×64). Tabla completa en `datos/parteA2_hilos.md`.
 
-**Paso 3, barrido.**
+**Paso 3, barrido con carga fija.** Con esa eficiencia, cada corrida completa con p hilos cuesta casi
+p × 30 min: el barrido completo (3 repeticiones, p = 2…24) costaría unas 110 h‑núcleo. Se mide en cambio
+una carga fija de 4 iteraciones SCF del mismo caso:
 
 | Decisión | Valor | Justificación |
 |---|---|---|
-| Caso | `entradas/caso_base/` (K7), igual que en la A.1 | Solo cambia el número de hilos |
-| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; núcleos pedidos como en la A.1 y paso de `srun` elegido por su máscara real; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` y el entorno elegido en el paso 2 | Memoria compartida pura; mismos núcleos y mismo cobro que la A.1; variables recomendadas para el binario OpenMP de VASP |
-| t(1) | Las 3 corridas con p = 1 de la A.1 | 1 proceso con 1 hilo es exactamente el mismo cálculo |
-| Repeticiones | 3 por cada p (18 corridas), en una sola cadena | Igual que la A.1: sin competencia entre jobs propios |
-| Orden | r1: 2→24; r2: 24→2; r3: 8, 16, 2, 24, 4, 12 | Que la hora no se confunda con el efecto de p |
-| Verificaciones | Afinidad, hilos en p núcleos físicos, sin hilos activos de más, VASP con 1 proceso y p hilos, mismo trabajo, carga ajena, atípicas | Rúbrica: corrección técnica |
+| Caso | `entradas/caso_base/` (K7) con `NELM = 4` | Mismo cálculo que la A.1; carga fija e idéntica para todo p |
+| Procesos e hilos | 1 proceso con p hilos, p = 1, 2, 4, 8, 12, 16, 24; núcleos pedidos como en la A.1 y paso de `srun` elegido por su máscara real; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m`, `OPENBLAS_NUM_THREADS=1` | Memoria compartida pura; mismos núcleos y mismo cobro que la A.1; entorno del paso 2 |
+| t(1) | Las 3 corridas con p = 1 de este barrido | Misma carga que las demás |
+| Comparación con MPI | Tiempo por iteración (`LOOP` del OUTCAR): primeras 4 iteraciones de la A.1 frente a las 4 de la A.2 | Mismo trabajo por iteración en ambos modos |
+| Repeticiones | 3 por cada p (21 corridas), en una sola cadena | Igual que la A.1 |
+| Orden | r1: 1→24; r2: 24→1; r3: 8, 16, 1, 24, 4, 12, 2 | Que la hora no se confunda con el efecto de p |
+| Costo | unas 31 h‑núcleo | Dentro de lo sugerido para la Parte A (90 h) |
+| Verificaciones | Afinidad, hilos en p núcleos físicos, sin hilos activos de más, VASP con 1 proceso y p hilos, 4 iteraciones, carga ajena, atípicas | Rúbrica: corrección técnica |
 
 ```bash
 bash slurm/parteA2_preparar.sh                   # verifica y guarda los scripts en Git
-python3 analisis/parteA2_diagnostico.py --guardar   # ronda 1: evidencia y geometria
+python3 analisis/parteA2_diagnostico.py --guardar   # ronda 1: evidencia
 bash slurm/parteA2_hilos.sh                      # ronda 2 (intento 2): 6 corridas cortas en cadena
 bash slurm/parteA2_estado.sh                     # seguimiento
-python3 analisis/parteA2_hilos.py                # veredicto, entorno elegido y costo proyectado
-python3 analisis/parteA2_hilos.py --guardar
-bash slurm/parteA2_enviar.sh                     # barrido en una cadena
-python3 analisis/parteA2_resumen.py              # t(p) media +/- desviacion, S(p), E(p)
+python3 analisis/parteA2_hilos.py --guardar      # ronda 2: tabla, conclusion y evidencia
+bash slurm/parteA2_enviar.sh                     # barrido con carga fija, en una cadena
+python3 analisis/parteA2_resumen.py              # t(p), S(p), E(p) y comparacion por iteracion con MPI
 python3 analisis/parteA2_resumen.py --guardar
 ```
 

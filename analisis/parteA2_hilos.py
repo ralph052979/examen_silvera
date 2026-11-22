@@ -4,14 +4,14 @@
 parteA2_hilos.py - Tarea A.2, ronda 2 del diagnostico de OpenMP: hilos de OpenBLAS y
                    politica de espera de OpenMP (diseno 2 x 2 con p = 4, y p = 24).
 
-Para cada corrida de logs/jobs_A2h.txt informa: hilos ACTIVOS de VASP (>= 50 % de un
-CPU) frente a los nucleos que tiene, uso total de CPU, tiempo por iteracion SCF y la
-aceleracion por iteracion frente a 1 hilo (primeras 4 iteraciones de la A.1, p = 1).
-Elige el entorno para el barrido (E1 si funciona; si no, E3), estima su costo y lo
-escribe en datos/parteA2_config.txt.
+Para cada corrida de logs/jobs_A2h2.txt (intento 2; el 1 se resume) informa: forma de
+lanzar el paso de srun, hilos ACTIVOS de VASP (>= 50 % de un CPU) frente a los nucleos
+que tiene, uso total de CPU, tiempo por iteracion SCF y la aceleracion por iteracion
+frente a 1 hilo (primeras 4 iteraciones de la A.1, p = 1). Concluye si E1 sirve para el
+barrido (mascara correcta y sin hilos de mas con p = 4 y 24).
 
 Uso (desde la carpeta del repositorio):
-  python3 analisis/parteA2_hilos.py             # tabla, explicacion y eleccion
+  python3 analisis/parteA2_hilos.py             # tabla, explicacion y conclusion
   python3 analisis/parteA2_hilos.py --guardar   # ademas guarda la evidencia en datos/ y hace commit
 
 Solo usa la biblioteca estandar de Python. Todo lo que imprime es ASCII.
@@ -21,7 +21,6 @@ import argparse
 import csv
 import glob
 import io
-import math
 import os
 import re
 import shutil
@@ -31,9 +30,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REG1 = os.path.join(REPO, "logs", "jobs_A2h.txt")      # intento 1 (variante B)
 REG2 = os.path.join(REPO, "logs", "jobs_A2h2.txt")     # intento 2 (nucleos como la A.1 + paso automatico)
 REG = REG2 if os.path.isfile(REG2) else REG1
-CONFIG = os.path.join(REPO, "datos", "parteA2_config.txt")
-P_BARRIDO = [2, 4, 8, 12, 16, 24]
-REPETICIONES = 3
 ENTORNO = {
     "E0": ("de la ronda 1 (control)", "", ""),
     "E1": ("OPENBLAS_NUM_THREADS=1", "1", ""),
@@ -215,38 +211,15 @@ def ver(filas, E, P):
     return None
 
 
-def elegir(filas):
-    for E in ("E1", "E3"):
-        a, b = ver(filas, E, 4), ver(filas, E, 24)
-        if a and b and a["veredicto"] == "PASA" and b["veredicto"] == "PASA":
-            return E
-    return None
+def conclusion(filas):
+    """E1 queda como entorno del barrido si sus corridas con p = 4 y 24 terminaron OK (mascara de p
+    nucleos y sin hilos de mas), aunque sean lentas: medir esa lentitud es justamente la A.2."""
+    a, b = ver(filas, "E1", 4), ver(filas, "E1", 24)
+    ok = bool(a and b and a.get("estado") == "OK" and b.get("estado") == "OK")
+    return {"ok": ok, "S4": a.get("S_iter") if a else None, "S24": b.get("S_iter") if b else None}
 
 
-def proyectar(filas, E, t_ref, t1):
-    """Amdahl por minimos cuadrados con S por iteracion en p = 4 y 24; t(p) = t1 / S(p)"""
-    pts = [(f["p"], f["S_iter"]) for f in (ver(filas, E, 4), ver(filas, E, 24)) if f and f.get("S_iter")]
-    if not pts or not t1:
-        return None
-    sxx = sum((1 - 1.0 / p) ** 2 for p, s in pts)
-    sxy = sum((1 - 1.0 / p) * (1.0 / s - 1.0 / p) for p, s in pts)
-    fa = min(1.0, max(0.0, sxy / sxx))
-    res = {"f": fa, "t": {}, "lim": {}}
-    costo = 0.0
-    for p in P_BARRIDO:
-        S = 1.0 / (fa + (1 - fa) / p)
-        t = t1 / S
-        res["t"][p] = t
-        costo += REPETICIONES * p * t / 3600.0
-        lim = max(20 * 60, 1.5 * t + 600)
-        lim = int(math.ceil(lim / 300.0) * 300)
-        lim = min(lim, 4 * 3600 + 55 * 60)
-        res["lim"][p] = "%02d:%02d:00" % (lim // 3600, (lim % 3600) // 60)
-    res["costo"] = costo
-    return res
-
-
-def imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1):
+def imprimir(filas, t_ref, t1, n1, conc, intento1):
     print("Diagnostico de OpenMP, ronda 2 (Tarea A.2): hilos de OpenBLAS y espera de OpenMP")
     print()
     if intento1:
@@ -308,20 +281,12 @@ def imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1):
     if c1 and c3 and c1.get("t_iter_s") and c3.get("t_iter_s"):
         print("Con p = 24, la espera pasiva (E3) cambia el tiempo por iteracion en %+.0f %% respecto de E1."
               % (100.0 * (c3["t_iter_s"] - c1["t_iter_s"]) / c1["t_iter_s"]))
-    if eleccion:
-        a, b = ver(filas, eleccion, 4), ver(filas, eleccion, 24)
-        print("ELECCION: %s (%s): pasa con p = 4 y p = 24." % (eleccion, ENTORNO[eleccion][0]))
-        if a.get("S_iter") and b.get("S_iter"):
-            print("  Aceleracion por iteracion: S(4) = %.2f, S(24) = %.2f." % (a["S_iter"], b["S_iter"]))
-        if proy:
-            print("  Amdahl con esos dos puntos: f = %.3f. Barrido proyectado (3 repeticiones de p = %s):"
-                  % (proy["f"], ", ".join(str(p) for p in P_BARRIDO)))
-            print("  " + "  ".join("p=%d: %.0f s" % (p, proy["t"][p]) for p in P_BARRIDO))
-            print("  costo estimado %.0f h-nucleo." % proy["costo"])
-            if proy["costo"] > 40:
-                print("  AVISO: es caro. Mandame una captura antes de enviar el barrido.")
-        print("Escrito en datos/parteA2_config.txt. Para guardar la evidencia en Git:")
-        print("  python3 analisis/parteA2_hilos.py --guardar")
+    if conc["ok"]:
+        print("CONCLUSION: E1 (OPENBLAS_NUM_THREADS=1, espera por defecto) es correcto con p = 4 y 24: mascara de p")
+        print("nucleos y sin hilos de mas. S por iteracion: S(4) = %s, S(24) = %s: OpenMP casi no acelera este caso."
+              % ("-" if conc["S4"] is None else "%.2f" % conc["S4"], "-" if conc["S24"] is None else "%.2f" % conc["S24"]))
+        print("El barrido usa E1 con una carga fija de 4 iteraciones SCF (el SCF completo costaria ~110 h-nucleo).")
+        print("Siguiente paso:  python3 analisis/parteA2_hilos.py --guardar   y despues   bash slurm/parteA2_enviar.sh")
     else:
         geo = [f for f in filas if (f.get("estado") or "").startswith("FALLA_geometria") and f.get("dir")]
         if geo:
@@ -329,7 +294,7 @@ def imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1):
             for l in leer(os.path.join(geo[0]["dir"], "geometria_pasos.txt")).splitlines():
                 if "PMIX ERROR" not in l:
                     print("  " + l[:150])
-        print("Ningun entorno paso con p = 4 y p = 24: no envies el barrido y mandame una captura.")
+        print("E1 no termino bien con p = 4 y p = 24: no envies el barrido y mandame una captura.")
 
 
 def resumen_intento1(f):
@@ -340,7 +305,7 @@ def resumen_intento1(f):
     return f["veredicto"].lower()
 
 
-def guardar(filas, t_ref, t1, eleccion, proy, intento1):
+def guardar(filas, t_ref, t1, conc, intento1):
     dd = os.path.join(REPO, "datos")
     os.path.isdir(dd) or os.makedirs(dd)
     cols = ["E", "p", "jobid", "nodo", "alloc", "nuc_mascara", "hilos_vasp", "hilos_totales", "activos", "uso",
@@ -376,24 +341,14 @@ def guardar(filas, t_ref, t1, eleccion, proy, intento1):
     for f in filas:
         if f.get("pila"):
             md += [u"Pila de los hilos (gdb) en %s p=%d: %s." % (f["E"], f["p"], f["pila"])]
-    if eleccion:
-        md += [u"", u"**Entorno elegido para el barrido: %s** (%s)." % (eleccion, ENTORNO[eleccion][0])]
-        if proy:
-            md += [u"Amdahl con S(4) y S(24) por iteracion: f = %.3f; costo proyectado del barrido: %.0f h-nucleo."
-                   % (proy["f"], proy["costo"])]
+    if conc["ok"]:
+        md += [u"", u"**Conclusion.** E1 (`OPENBLAS_NUM_THREADS=1`, espera de libgomp por defecto) es correcto con "
+                    u"p = 4 y 24 (mascara de p nucleos fisicos, p hilos activos), pero OpenMP casi no acelera este caso: "
+                    u"S por iteracion = %s con 4 hilos y %s con 24. La espera pasiva es mas lenta. El barrido de la A.2 "
+                    u"usa E1 con una carga fija de 4 iteraciones SCF (README, seccion 6)."
+               % ("-" if conc["S4"] is None else "%.2f" % conc["S4"], "-" if conc["S24"] is None else "%.2f" % conc["S24"])]
     with io.open(os.path.join(dd, "parteA2_hilos.md"), "w", encoding="utf-8") as fh:
         fh.write(u"\n".join(md) + u"\n")
-    if eleccion and proy:
-        pasos = sorted(set(f.get("paso") for f in (ver(filas, eleccion, 4), ver(filas, eleccion, 24)) if f))
-        lineas = [u"variante=C", u"paso_modo=auto", u"paso_probado=%s" % ",".join(pasos), u"entorno=%s" % eleccion,
-                  u"blas_hilos=%s" % ENTORNO[eleccion][1], u"espera_omp=%s" % ENTORNO[eleccion][2],
-                  u"p_max=24", u"f_amdahl=%.4f" % proy["f"], u"t1_s=%.1f" % t1, u"costo_estimado_h=%.1f" % proy["costo"]]
-        lineas += [u"limite_p%d=%s" % (p, proy["lim"][p]) for p in P_BARRIDO]
-        lineas += [u"motivo=%s pasa con p = 4 y 24 sin sobresuscripcion" % eleccion]
-        with io.open(CONFIG, "w", encoding="utf-8") as fh:
-            fh.write(u"\n".join(lineas) + u"\n")
-    elif os.path.exists(CONFIG):
-        os.remove(CONFIG)
 
 
 def guardar_evidencia(filas):
@@ -422,7 +377,7 @@ def guardar_evidencia(filas):
         print("AVISO: git add fallo: " + out)
         return
     if git("diff", "--cached", "--quiet").startswith("ERROR"):
-        out = git("commit", "-q", "-m", "Parte A.2: diagnostico de OpenMP, ronda 2 (OpenBLAS y espera) y entorno elegido")
+        out = git("commit", "-q", "-m", "Parte A.2: diagnostico de OpenMP, ronda 2 (hilos de OpenBLAS y espera de OpenMP)")
         print(("AVISO: git commit fallo: " + out) if out.startswith("ERROR") else ("Commit hecho: " + git("log", "--oneline", "-1")))
     else:
         print("Nada nuevo que guardar en Git.")
@@ -439,18 +394,17 @@ def main():
     filas = evaluar(t_ref)
     intento1 = evaluar(t_ref, REG1) if (REG == REG2 and os.path.isfile(REG1)) else []
     pend = [f for f in filas if f["veredicto"] == "EN CURSO"]
-    eleccion = None if pend else elegir(filas)
-    proy = proyectar(filas, eleccion, t_ref, t1) if eleccion else None
-    imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1)
+    conc = conclusion(filas) if not pend else {"ok": False, "S4": None, "S24": None}
+    imprimir(filas, t_ref, t1, n1, conc, intento1)
     if a.guardar:
         print()
         if pend:
             print("No se guarda nada mientras haya corridas en cola o corriendo.")
             return
-        guardar(filas, t_ref, t1, eleccion, proy, intento1)
+        guardar(filas, t_ref, t1, conc, intento1)
         guardar_evidencia(filas + intento1)
     elif not pend:
-        guardar(filas, t_ref, t1, eleccion, proy, intento1)
+        guardar(filas, t_ref, t1, conc, intento1)
 
 
 if __name__ == "__main__":
