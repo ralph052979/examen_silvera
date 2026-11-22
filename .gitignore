@@ -1,0 +1,14 @@
+POTCAR
+lib/
+corridas/
+logs/
+WAVECAR
+CHGCAR
+CHG
+vasprun.xml
+PROCAR
+DOSCAR
+EIGENVAL
+*.swp
+__pycache__/
+*.pyc

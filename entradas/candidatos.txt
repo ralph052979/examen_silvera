@@ -1,0 +1,14 @@
+# Candidatos de calibracion de la Tarea 0 (todos con el mismo INCAR_base y el mismo POSCAR).
+# Solo cambia la malla de k-points (centrada en Gamma) de la supercelda 2x2x1.
+# NKPTS = k-points irreducibles esperados con la simetria C3v de la vacancia
+#         (calculados con el POSCAR; VASP debe reportar el mismo numero en el OUTCAR).
+# equiv_primitiva = malla equivalente en la celda primitiva de 6 atomos (2n x 2n x m).
+#
+# nombre  n1  n2  n3  NKPTS  equiv_primitiva
+K1         3   3   1      3  6x6x1
+K2         4   4   2      8  8x8x2
+K3         6   6   2     14  12x12x2
+K4         6   6   3     17  12x12x3
+K5         8   8   2     20  16x16x2
+K6         8   8   3     25  16x16x3
+K7        10  10   3     36  20x20x3
