@@ -25,11 +25,12 @@ echo "Repositorio: $REPO"
 
 # -----------------------------------------------------------------------------
 paso "1/5  Archivos de la Parte A.2"
-for f in slurm/vasp_job.sh slurm/parteA2_diagnostico.sh slurm/parteA2_enviar.sh slurm/parteA2_estado.sh \
-         analisis/parteA2_diagnostico.py analisis/parteA2_resumen.py README.md; do
+for f in slurm/vasp_job.sh slurm/parteA2_diagnostico.sh slurm/parteA2_hilos.sh slurm/parteA2_enviar.sh \
+         slurm/parteA2_estado.sh analisis/parteA2_diagnostico.py analisis/parteA2_hilos.py \
+         analisis/parteA2_resumen.py README.md; do
     [ -s "$f" ] || falla "falta $f: el paquete no se descomprimio dentro de examen_silvera (ver la guia)"
 done
-grep -q "hilos_muestras" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior: descomprime de nuevo el paquete"
+grep -q "hilos_activos_mediana" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior: descomprime de nuevo el paquete"
 CR=$(grep -l $'\r' slurm/*.sh analisis/*.py README.md 2>/dev/null)
 if [ -n "$CR" ]; then
     sed -i 's/\r$//' $CR
@@ -75,23 +76,42 @@ if [ -s entradas/POTCAR.sha256 ]; then
 fi
 [ -s lib/libfftw3_omp.so.3 ] && [ -s lib/libfftw3.so.3 ] || falla "faltan las librerias de lib/"
 ok "POTCAR igual al de la Tarea 0 y librerias FFTW en lib/ (libfftw3_omp es la que usa OpenMP)"
+LDDF=$(ls corridas/ex_A2d_*/ldd.txt corridas/ex_A1_*/ldd.txt 2>/dev/null | head -1)
+LIBOB=""
+[ -n "$LDDF" ] && LIBOB=$(awk '/libopenblas/ && $2 == "=>" {print $3; exit}' "$LDDF")
+if [ -n "$LIBOB" ] && [ -f "$LIBOB" ]; then
+    if ldd "$LIBOB" 2>/dev/null | grep -q libgomp; then
+        ok "OpenBLAS que usa VASP: $LIBOB -> usa los hilos de OpenMP (enlaza libgomp)"
+    else
+        ok "OpenBLAS que usa VASP: $LIBOB -> usa hilos propios (no enlaza libgomp)"
+    fi
+else
+    aviso "no se pudo ubicar la libreria OpenBLAS de VASP (no es un error; la ronda 2 la registra)"
+fi
 
 # -----------------------------------------------------------------------------
 paso "5/5  Git"
+if [ -e datos/parteA2_variante.txt ]; then
+    git rm -q --cached --ignore-unmatch datos/parteA2_variante.txt
+    rm -f datos/parteA2_variante.txt
+    ok "borrado datos/parteA2_variante.txt (la eleccion ahora la hace la ronda 2)"
+fi
 git add slurm analisis README.md || falla "git add fallo"
 if git diff --cached --quiet; then
     ok "nada nuevo que guardar (los scripts ya estaban en Git)"
 else
-    git commit -q -m "Parte A.2: escalamiento fuerte con OpenMP (diagnostico, barrido, analisis)" || falla "git commit fallo"
+    git commit -q -m "Parte A.2: ronda 2 del diagnostico de OpenMP (hilos de OpenBLAS, espera de OpenMP) y vigilancia de hilos" || falla "git commit fallo"
     ok "commit $(git rev-parse --short HEAD)"
 fi
 [ -z "$(git status --porcelain -- entradas slurm analisis README.md)" ] || falla "quedaron cambios sin guardar en Git"
 
 echo
 echo "================================================================"
-if [ -s logs/jobs_A2d.txt ]; then
-    echo " PREPARACION A.2 COMPLETA. El diagnostico ya se envio:"
-    echo "   python3 analisis/parteA2_diagnostico.py"
+if [ -s logs/jobs_A2h.txt ]; then
+    echo " PREPARACION A.2 COMPLETA. La ronda 2 ya se envio:  bash slurm/parteA2_estado.sh"
+elif [ -s logs/jobs_A2d.txt ]; then
+    echo " PREPARACION A.2 COMPLETA. Siguiente paso (ronda 1, guardar la evidencia):"
+    echo "   python3 analisis/parteA2_diagnostico.py --guardar"
 else
     echo " PREPARACION A.2 COMPLETA. Siguiente paso:  bash slurm/parteA2_diagnostico.sh"
 fi

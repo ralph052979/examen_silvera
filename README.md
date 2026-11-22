@@ -93,9 +93,25 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
    demás esperan en cola aunque haya núcleos libres.
 9. **Afinidad.** Cada corrida verifica, con las máscaras de `srun --cpu-bind=verbose` y la topología
    de `/sys`, que cada proceso tenga exactamente `--cpus-per-task` núcleos **físicos** y que ningún
-   núcleo físico se comparta (`afinidad.txt`). Con OpenMP, además, mira con `ps -L` cada 10 s en qué
-   núcleos físicos corren de verdad los hilos de VASP (`hilos.txt`). Si algo no se cumple, la corrida
-   se marca como fallida.
+   núcleo físico se comparta (`afinidad.txt`). La máscara se revisa al arrancar: si está mal, la corrida
+   se detiene en segundos. Con OpenMP, además, cada 10 s se lee `/proc/<pid>/task/*/stat` de VASP (el
+   pid lo escribe `srun` en `vasp.err`): en qué núcleos físicos están los hilos y cuántos están
+   **activos** (≥ 50 % de un CPU) (`hilos_crudo.txt`, `hilos.txt`). Si hay más hilos activos que
+   núcleos, la corrida se marca como sobresuscrita. (El primer monitor buscaba el proceso con `ps` y
+   `/proc/<pid>/environ` y en la ronda 1 de la A.2 no obtuvo ninguna muestra.)
+10. **OpenMP con 1 hilo por CPU asignado (A.2, ronda 1, 2026-11-22).** Con p CPUs para p hilos, ninguna
+    corrida terminó 4 iteraciones en 20 min (con 1 hilo bastan unos 7 min). Con 2 hilos de hardware por
+    núcleo (variante D, 8 CPUs para 4 hilos) sí terminó, pero cada iteración tardó 127–133 s, frente a
+    94–97 s con 1 hilo, y el tiempo de CPU fue 4,9 veces el real con 4 hilos. Durante la corrida C24,
+    `ps -L` mostró 25 hilos de VASP trabajando con `OMP_NUM_THREADS=24`. Hipótesis que prueba la ronda 2:
+    OpenBLAS lanza un hilo propio que compite con los de OpenMP, y como libgomp espera girando, quitarle
+    el núcleo a un solo hilo frena a todos. Resultado en `datos/parteA2_hilos.md`.
+11. **Salida de VASP con bufer.** VASP compilado con gfortran escribe OSZICAR y OUTCAR en bloques y los
+    vacía al terminar: una corrida que Slurm corta los deja vacíos o incompletos. `vasp_job.sh` fija
+    `GFORTRAN_UNBUFFERED_PRECONNECTED=y`, de modo que `vasp.out` muestra cada iteración SCF al momento,
+    y anota en `progreso.txt` el segundo en que termina cada una. Además: si a los `MAX_PRIMERA_ITER`
+    segundos no hay ninguna iteración, la corrida se detiene; y si Slurm avisa que se acaba el tiempo
+    (`--signal=B:USR1@90`), se detiene VASP y se completan igual las verificaciones.
 
 ---
 
@@ -124,13 +140,15 @@ examen_silvera/
     parteA1_enviar.sh               Tarea A.1: envia las 21 corridas en una cadena (o --faltantes)
     parteA1_estado.sh               Tarea A.1: estado de las corridas
     parteA2_preparar.sh             Tarea A.2: verifica y guarda los scripts en Git
-    parteA2_diagnostico.sh          Tarea A.2: 6 corridas cortas para elegir como pedir los nucleos
+    parteA2_diagnostico.sh          Tarea A.2, ronda 1: 6 corridas cortas (como pedir los nucleos)
+    parteA2_hilos.sh                Tarea A.2, ronda 2: hilos de OpenBLAS y espera de OpenMP
     parteA2_enviar.sh               Tarea A.2: envia el barrido OpenMP en una cadena (o --faltantes)
-    parteA2_estado.sh               Tarea A.2: estado del diagnostico y del barrido
+    parteA2_estado.sh               Tarea A.2: estado de las dos rondas y del barrido
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
-    parteA2_diagnostico.py          Tarea A.2: veredicto del diagnostico de OpenMP y variante elegida
+    parteA2_diagnostico.py          Tarea A.2, ronda 1: mascaras (tambien de las cortadas) y tiempos
+    parteA2_hilos.py                Tarea A.2, ronda 2: hilos activos, tiempos, entorno elegido y costo
     parteA2_resumen.py              Tarea A.2: t(p) con media y desviacion estandar, S(p), E(p)
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I
@@ -139,8 +157,9 @@ examen_silvera/
 ```
 
 Cada carpeta `corridas/<job>_<id>/` guarda las entradas y sus md5 (`entradas.md5`), `entorno.txt`
-(nodo, procesador, commit), `modulos.txt`, `ldd.txt`, `variables.txt`, `slurm_job.txt`, la afinidad
-(`vasp.err` y `afinidad.txt`), `carga.txt`, `tiempo.txt` y las salidas de VASP.
+(nodo, procesador, commit, entorno de hilos, OpenBLAS), `modulos.txt`, `ldd.txt`, `variables.txt`,
+`slurm_job.txt`, `topologia.txt`, la afinidad (`vasp.err` y `afinidad.txt`), los hilos (`hilos_crudo.txt`
+y `hilos.txt`), `progreso.txt`, `carga.txt`, `tiempo.txt` y las salidas de VASP.
 
 ---
 
@@ -198,39 +217,55 @@ una línea `JOBID motivo` a `datos/parteA1_excluidas.txt`; `--faltantes` la repi
 
 ## 6. Parte A.2: escalamiento fuerte con OpenMP
 
-**Paso 1, diagnóstico.** Corridas cortas del caso base (`NELM = 4`) para elegir cómo pedir p núcleos
-físicos para p hilos:
+**Paso 1, diagnóstico ronda 1: cómo pedir p núcleos físicos.** Corridas cortas del caso base
+(`NELM = 4`), enviadas a la vez:
 
 | Variante | Petición a Slurm | Probada con |
 |---|---|---|
-| A | `--ntasks=1 --cpus-per-task=p --hint=nomultithread` (la forma directa; falló el 2026-11-18) | p = 4 |
+| A | `--ntasks=1 --cpus-per-task=p --hint=nomultithread` | p = 4 |
 | B | `--ntasks=1 --cpus-per-task=p --threads-per-core=1` | p = 4 y 24 |
 | C | `--ntasks=p --cpus-per-task=1 --hint=nomultithread` (la asignación de la A.1) y un solo proceso con `srun --ntasks=1 --cpus-per-task=p` | p = 4 y 24 |
-| D | `--ntasks=1 --cpus-per-task=2p --hint=multithread` (2 hilos de hardware por núcleo: cobra el doble y solo cabe hasta p = 12) | p = 4 |
+| D | `--ntasks=1 --cpus-per-task=2p --hint=multithread` (2 hilos de hardware por núcleo: cobra el doble) | p = 4 |
 
-Una variante pasa si VASP corre con p hilos, la máscara del proceso tiene p núcleos físicos y los hilos
-corren de verdad en p núcleos físicos distintos. Se prefiere la que además cobra p CPUs y llega a
-p = 24 (C, luego B). El resultado queda en `datos/parteA2_diagnostico.md` y la variante elegida en
-`datos/parteA2_variante.txt`.
+Resultado (hallazgo 10 de la sección 2): ninguna variante sirve tal cual. Tabla, máscaras leídas de
+`vasp.err` y tiempos por iteración en `datos/parteA2_diagnostico.md`; la máscara de B decide si la ronda 2
+agrega `srun --threads-per-core=1` (`datos/parteA2_geometria.txt`).
 
-**Paso 2, barrido.**
+**Paso 2, diagnóstico ronda 2: hilos de OpenBLAS y espera de OpenMP.** Diseño 2 × 2 con p = 4
+(variante B), en una sola cadena:
+
+| Entorno | Variables | Para qué |
+|---|---|---|
+| E0 | las de la ronda 1 (con foto de las pilas de los hilos con `gdb`) | control: reproduce el problema |
+| E1 | `OPENBLAS_NUM_THREADS=1` | OpenBLAS sin hilos propios (lo que pide su documentación si la aplicación ya usa hilos) |
+| E2 | `OMP_WAIT_POLICY=PASSIVE` | los hilos de OpenMP esperan durmiendo en vez de girar |
+| E3 | ambas | |
+
+Con p = 24 se corren E1 y E3, cada una solo si pasó con p = 4. Se elige E1 si pasa con p = 4 y 24
+(no cambia nada más que OpenBLAS, que en la A.1 ya usaba 1 hilo y la política de espera queda la de
+libgomp); si no, E3. La tabla queda
+en `datos/parteA2_hilos.md` y el entorno elegido, con el costo proyectado y el límite de tiempo de cada
+p, en `datos/parteA2_config.txt`.
+
+**Paso 3, barrido.**
 
 | Decisión | Valor | Justificación |
 |---|---|---|
 | Caso | `entradas/caso_base/` (K7), igual que en la A.1 | Solo cambia el número de hilos |
-| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` | Memoria compartida pura; variables recomendadas para el binario OpenMP de VASP |
+| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; variante B; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` y el entorno elegido en el paso 2 | Memoria compartida pura; variables recomendadas para el binario OpenMP de VASP |
 | t(1) | Las 3 corridas con p = 1 de la A.1 | 1 proceso con 1 hilo es exactamente el mismo cálculo |
 | Repeticiones | 3 por cada p (18 corridas), en una sola cadena | Igual que la A.1: sin competencia entre jobs propios |
 | Orden | r1: 2→24; r2: 24→2; r3: 8, 16, 2, 24, 4, 12 | Que la hora no se confunda con el efecto de p |
-| Verificaciones | Afinidad, hilos en p núcleos físicos, VASP con 1 proceso y p hilos, mismo trabajo, carga ajena, atípicas | Rúbrica: corrección técnica |
+| Verificaciones | Afinidad, hilos en p núcleos físicos, sin hilos activos de más, VASP con 1 proceso y p hilos, mismo trabajo, carga ajena, atípicas | Rúbrica: corrección técnica |
 
 ```bash
 bash slurm/parteA2_preparar.sh                   # verifica y guarda los scripts en Git
-bash slurm/parteA2_diagnostico.sh                # paso 1: 6 corridas cortas
+python3 analisis/parteA2_diagnostico.py --guardar   # ronda 1: evidencia y geometria
+bash slurm/parteA2_hilos.sh                      # ronda 2: 6 corridas cortas en cadena
 bash slurm/parteA2_estado.sh                     # seguimiento
-python3 analisis/parteA2_diagnostico.py          # veredicto y variante elegida
-python3 analisis/parteA2_diagnostico.py --guardar
-bash slurm/parteA2_enviar.sh                     # paso 2: barrido en una cadena
+python3 analisis/parteA2_hilos.py                # veredicto, entorno elegido y costo proyectado
+python3 analisis/parteA2_hilos.py --guardar
+bash slurm/parteA2_enviar.sh                     # barrido en una cadena
 python3 analisis/parteA2_resumen.py              # t(p) media +/- desviacion, S(p), E(p)
 python3 analisis/parteA2_resumen.py --guardar
 ```

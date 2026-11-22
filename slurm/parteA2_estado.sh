@@ -15,7 +15,7 @@ estado_job() {   # imprime "ESTADO MINUTOS"
 }
 
 if [ -s logs/jobs_A2d.txt ]; then
-    echo "=== Diagnostico de OpenMP ==="
+    echo "=== Diagnostico de OpenMP, ronda 1 (como pedir los nucleos) ==="
     printf "%-5s %-9s %-11s %-12s %8s %-9s %-7s  %s\n" Var Job Slurm Nodo Minutos Mascara Hilos Resultado
     NC=0
     while read -r V P ID RESTO; do
@@ -42,9 +42,44 @@ if [ -s logs/jobs_A2d.txt ]; then
     done < logs/jobs_A2d.txt
     echo
     if [ "$NC" -eq 0 ]; then
-        echo "Diagnostico terminado. Siguiente paso:  python3 analisis/parteA2_diagnostico.py"
+        echo "Ronda 1 terminada. Resultado:  python3 analisis/parteA2_diagnostico.py"
     else
         echo "Quedan $NC corridas del diagnostico en cola o corriendo."
+    fi
+    echo
+fi
+
+if [ -s logs/jobs_A2h.txt ]; then
+    echo "=== Diagnostico de OpenMP, ronda 2 (hilos de OpenBLAS y espera de OpenMP) ==="
+    printf "%-4s %-3s %-9s %-11s %-12s %8s %-8s %-5s  %s\n" Ent p Job Slurm Nodo Minutos Activos Iter Resultado
+    NC=0
+    while read -r E P ID RESTO; do
+        [ -n "$E" ] || continue
+        if [ "$ID" = "RECHAZADO" ]; then
+            printf "%-4s %-3s %-9s %-11s %-12s %8s %-8s %-5s  %s\n" "$E" "$P" - RECHAZADO - - - - "$(echo "$RESTO" | cut -c1-50)"
+            continue
+        fi
+        read -r ST MIN <<< "$(estado_job "$ID")"
+        [ -n "$ST" ] || ST="?"
+        case "$ST" in PENDING|RUNNING|CONFIGURING|COMPLETING) NC=$((NC + 1)) ;; esac
+        D="corridas/ex_A2h_${E}_p${P}_${ID}"
+        NODO="-"; ACT="-"; RES="-"
+        IT=$( { wc -l < "$D/progreso.txt"; } 2>/dev/null || echo -)
+        if [ -s "$D/tiempo.txt" ]; then
+            RES=$(grep '^estado=' "$D/tiempo.txt" | tail -1 | cut -d= -f2)
+            NODO=$(grep '^nodo=' "$D/entorno.txt" 2>/dev/null | cut -d= -f2 | cut -d. -f1 | sed 's/granado-//')
+            W=$(grep '^wall_s=' "$D/tiempo.txt" | cut -d= -f2)
+            [ -n "$W" ] && MIN=$(awk -v w="$W" 'BEGIN{printf "%.1f", w/60}')
+            A=$(grep '^hilos_activos_mediana=' "$D/tiempo.txt" | cut -d= -f2)
+            [ -n "$A" ] && ACT="$A/$P"
+        fi
+        printf "%-4s %-3s %-9s %-11s %-12s %8s %-8s %-5s  %s\n" "$E" "$P" "$ID" "$ST" "${NODO:--}" "${MIN:--}" "$ACT" "${IT:--}" "$(echo "$RES" | cut -c1-60)"
+    done < logs/jobs_A2h.txt
+    echo
+    if [ "$NC" -eq 0 ]; then
+        echo "Ronda 2 terminada. Siguiente paso:  python3 analisis/parteA2_hilos.py"
+    else
+        echo "Quedan $NC corridas de la ronda 2 en cola o corriendo (es una cadena: corren de a una)."
     fi
     echo
 fi
@@ -85,4 +120,4 @@ if [ -s logs/jobs_A2.txt ]; then
     [ "$NMAL" -eq 0 ] || echo "Hay corridas con problema: mira logs/ex_A2_p<p>_r<r>_<Job>.out y mandame una captura."
 fi
 
-[ -s logs/jobs_A2d.txt ] || [ -s logs/jobs_A2.txt ] || echo "Todavia no hay corridas de la A.2."
+[ -s logs/jobs_A2d.txt ] || [ -s logs/jobs_A2h.txt ] || [ -s logs/jobs_A2.txt ] || echo "Todavia no hay corridas de la A.2."

@@ -176,6 +176,8 @@ def corridas(reg, prefijo, excl, solo_p=None, origen="A.2"):
         c["alloc"] = num(tie.get("alloc_cpus"), int)
         c["muestras"] = num(tie.get("hilos_muestras"), int) or 0
         c["nuc_hilos"] = num(tie.get("nucleos_fisicos_hilos"), int)
+        c["activos"] = num(tie.get("hilos_activos_mediana"))
+        c["uso_cpu"] = num(tie.get("uso_cpu_mediana"))
         aj = tie.get("carga_ajena_max", "")
         m = re.match(r"(\d+)/(\d+)", aj)
         c["carga_ajena"] = aj or "-"
@@ -246,25 +248,27 @@ def analizar(runs):
 
 
 def imprimir(runs, filas, avisos, faltan, var):
-    print("Tarea A.2: escalamiento fuerte con OpenMP (1 proceso MPI, p hilos; variante %s)" % var)
+    print("Tarea A.2: escalamiento fuerte con OpenMP (1 proceso MPI, p hilos; %s)" % var)
     print()
-    cab = "%-3s %-4s %-3s %-3s %-8s %-10s %-11s %9s %5s %8s %-6s %-6s %s" % (
-        "#", "de", "r", "p", "Job", "Nodo", "Sockets", "t [s]", "Iter", "t/iter", "Hilos", "Ajena", "Estado / notas")
+    cab = "%-3s %-4s %-3s %-3s %-8s %-10s %-11s %9s %5s %8s %-6s %-7s %-6s %s" % (
+        "#", "de", "r", "p", "Job", "Nodo", "Sockets", "t [s]", "Iter", "t/iter", "Hilos", "Activos", "Ajena", "Estado / notas")
     print(cab)
     print("-" * len(cab))
     for c in runs:
         nota = c["estado"] if not c["ok"] else "OK"
         if c["notas"]:
             nota += "; " + "; ".join(c["notas"])
-        print("%-3d %-4s %-3s %-3d %-8s %-10s %-11s %9s %5s %8s %-6s %-6s %s" % (
+        print("%-3d %-4s %-3s %-3d %-8s %-10s %-11s %9s %5s %8s %-6s %-7s %-6s %s" % (
             c["orden"], c["origen"], "r%d" % c["r"], c["p"], c["jobid"], c.get("nodo", "-").replace("granado-", ""),
             c.get("socket", "-"), fmt(c.get("wall_s"), "%.1f"), fmt(c.get("n_iter"), "%d"),
             fmt(c.get("t_iter_s"), "%.2f s"),
             "-" if not c.get("muestras") else "%s/%d" % (c.get("nuc_hilos"), c["p"]),
+            "-" if (c.get("activos") is None or not c.get("muestras")) else "%g/%d" % (c["activos"], c["p"]),
             c.get("carga_ajena", "-"), nota))
     print()
     print("de = tarea de donde sale la corrida (p = 1 es la de la A.1: 1 proceso, 1 hilo). Hilos = nucleos")
-    print("fisicos donde corrieron los hilos de VASP. Ajena = CPUs ocupados por OTROS en los sockets del job.")
+    print("fisicos donde corrieron los hilos de VASP. Activos = hilos que usan >= 50 % de un CPU (mediana).")
+    print("Ajena = CPUs ocupados por OTROS en los sockets del job.")
     print()
     cab = "%-3s %-2s %16s %8s %17s %15s %15s" % ("p", "n", "t medio [s]", "CV [%]", "min - max [s]", "S(p)", "E(p)")
     print(cab)
@@ -297,7 +301,7 @@ def imprimir(runs, filas, avisos, faltan, var):
 def guardar_csv(runs, filas, var):
     os.path.isdir(os.path.join(REPO, "datos")) or os.makedirs(os.path.join(REPO, "datos"))
     c1 = ["orden", "origen", "p", "r", "jobid", "nodo", "cpu", "estado", "excluida", "socket", "alloc", "afinidad_ok",
-          "muestras", "nuc_hilos", "carga_ajena", "wall_s", "elapsed_s", "n_iter", "t_iter_s", "ranks", "hilos_vasp",
+          "muestras", "nuc_hilos", "activos", "uso_cpu", "carga_ajena", "wall_s", "elapsed_s", "n_iter", "t_iter_s", "ranks", "hilos_vasp",
           "nkpts", "nbands", "mem_mb", "toten", "e_sigma0", "git_hash", "version"]
     with io.open(os.path.join(REPO, "datos", "parteA2_corridas.csv"), "w", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\n")
@@ -314,7 +318,7 @@ def guardar_csv(runs, filas, var):
     md = [u"# Tarea A.2 - escalamiento fuerte con OpenMP", u"",
           u"Caso base: WSe2 bulk 2x2x1 con V_Se (23 atomos), ENCUT = 400 eV, Gamma 10x10x3 (36 k-points), "
           u"NBANDS = 144. 1 proceso MPI con p hilos OpenMP (`OMP_PLACES=cores`, `OMP_PROC_BIND=close`), "
-          u"un nucleo fisico por hilo (variante %s del diagnostico). t(1) = corridas con p = 1 de la A.1 "
+          u"un nucleo fisico por hilo; %s (diagnostico de la A.2). t(1) = corridas con p = 1 de la A.1 "
           u"(1 proceso, 1 hilo). t = tiempo de pared de `srun`, media +/- desviacion estandar." % var, u"",
           u"| p | n | t medio (s) | t medio (min) | min - max (s) | S(p) | E(p) |", u"|---|---|---|---|---|---|---|"]
     for f in filas:
@@ -337,8 +341,8 @@ def guardar_evidencia(runs):
             continue
         dst = os.path.join(base, os.path.basename(c["dir"]))
         os.path.isdir(dst) or os.makedirs(dst)
-        for a in ("tiempo.txt", "entorno.txt", "afinidad.txt", "hilos.txt", "hilos_crudo.txt", "carga.txt", "OSZICAR",
-                  "modulos.txt", "entradas.md5", "slurm_job.txt"):
+        for a in ("tiempo.txt", "entorno.txt", "afinidad.txt", "hilos.txt", "hilos_crudo.txt", "progreso.txt", "carga.txt",
+                  "OSZICAR", "modulos.txt", "entradas.md5", "slurm_job.txt", "variables.txt"):
             if os.path.isfile(os.path.join(c["dir"], a)):
                 shutil.copy(os.path.join(c["dir"], a), os.path.join(dst, a))
         lin = leer(os.path.join(c["dir"], "OUTCAR")).splitlines()
@@ -360,8 +364,11 @@ def main():
     ap = argparse.ArgumentParser(description="Resumen de la Tarea A.2")
     ap.add_argument("--guardar", action="store_true", help="copia la evidencia a datos/parteA2/ y hace commit")
     a = ap.parse_args()
-    var = clave_valor(os.path.join(REPO, "datos", "parteA2_variante.txt"))
+    var = clave_valor(os.path.join(REPO, "datos", "parteA2_config.txt"))
     pmax = num(var.get("p_max"), int) or 24
+    desc = "variante %s, entorno %s: OPENBLAS_NUM_THREADS=%s, OMP_WAIT_POLICY=%s" % (
+        var.get("variante", "?"), var.get("entorno", "?"), var.get("blas_hilos") or "sin fijar",
+        var.get("espera_omp") or "sin fijar")
     runs2 = corridas(os.path.join(REPO, "logs", "jobs_A2.txt"), "ex_A2",
                      os.path.join(REPO, "datos", "parteA2_excluidas.txt"), origen="A.2")
     if not runs2:
@@ -376,8 +383,8 @@ def main():
               if not any(c["p"] == P and c["r"] == R and c["ok"] and not c.get("excluida") for c in runs2)]
     if not any(c["ok"] for c in runs1):
         avisos.append("no se encontraron las corridas con p = 1 de la A.1 (t(1)); S y E no se pueden calcular")
-    imprimir(runs, filas, avisos, faltan, var.get("variante", "?"))
-    guardar_csv(runs, filas, var.get("variante", "?"))
+    imprimir(runs, filas, avisos, faltan, desc)
+    guardar_csv(runs, filas, desc)
     print()
     print("Tablas guardadas en datos/parteA2_corridas.csv, datos/parteA2_resumen.csv y datos/parteA2_tabla.md")
     if a.guardar:
