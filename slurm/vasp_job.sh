@@ -20,6 +20,10 @@
 #    PASO_NTASKS  (opcional) procesos del paso srun   (por defecto, los del job)
 #    PASO_CPT     (opcional) CPUs por proceso del paso (por defecto, las del job)
 #    PASO_TPC     (opcional) srun --threads-per-core=PASO_TPC
+#    PASO_MODO    (opcional) auto = 1 proceso con HILOS hilos, uno por nucleo fisico. Antes
+#                 de VASP se prueban, con un comando de 1 s, varias formas de pedir el paso
+#                 a srun (geometria_pasos.txt) y se usa la primera cuya mascara real tiene
+#                 HILOS nucleos fisicos (de preferencia, 1 hilo de hardware por nucleo).
 #    HILOS        (opcional) hilos OpenMP por proceso  (por defecto PASO_CPT)
 #    BLAS_HILOS   (opcional) OPENBLAS_NUM_THREADS (1 = OpenBLAS sin hilos propios)
 #    ESPERA_OMP   (opcional) OMP_WAIT_POLICY (PASSIVE o ACTIVE; vacio = la de libgomp)
@@ -129,6 +133,10 @@ GEOM=""
 [ -n "${PASO_NTASKS:-}" ] && GEOM="$GEOM --ntasks=$PASO_NTASKS"
 [ -n "${PASO_CPT:-}" ]    && GEOM="$GEOM --cpus-per-task=$PASO_CPT"
 [ -n "${PASO_TPC:-}" ]    && GEOM="$GEOM --threads-per-core=$PASO_TPC"
+BIND="--cpu-bind=verbose,cores"
+if [ "${PASO_MODO:-}" = "auto" ]; then
+    NTASKS=1; CPT="$NHILOS"; GEOM=""      # el paso se decide con las pruebas de la seccion 5
+fi
 # Solo este script decide los hilos: se borra lo que venga del entorno del login.
 unset OPENBLAS_NUM_THREADS GOTO_NUM_THREADS OMP_WAIT_POLICY GOMP_SPINCOUNT OMP_DYNAMIC \
       OMP_NESTED OMP_MAX_ACTIVE_LEVELS MKL_NUM_THREADS
@@ -168,6 +176,7 @@ FFTLIB=$(LC_ALL=C grep -a -c -i 'fftlib' "$VASP_BIN" 2>/dev/null)
     echo "paso_ntasks=$NTASKS"
     echo "paso_cpus_per_task=$CPT"
     echo "paso_threads_per_core=${PASO_TPC:-no}"
+    echo "paso_modo=${PASO_MODO:-fijo}"
     echo "omp_num_threads=$OMP_NUM_THREADS"
     echo "openblas_num_threads=${OPENBLAS_NUM_THREADS:-no_fijado}"
     echo "omp_wait_policy=${OMP_WAIT_POLICY:-no_fijado}"
@@ -356,13 +365,72 @@ monitor_hilos() {
     done
 }
 
+# ------------------------------------------------------------- 4b. paso de srun (PASO_MODO=auto)
+# En Granado (CR_CPU_MEMORY) un paso "srun -n 1 -c p" toma los 2 hilos de hardware de p/2
+# nucleos. Se prueban otras formas con un comando de 1 s y se elige por la mascara REAL
+# (Cpus_allowed_list del proceso), no por lo que diga la opcion.
+cpus_de_lista() {   # "0-3,36-39" -> "0 1 2 3 36 37 38 39"
+    echo "$1" | tr ',' '\n' | awk -F- 'NF == 1 && $1 != "" {print $1} NF == 2 {for (i = $1; i <= $2; i++) print i}' | tr '\n' ' '
+}
+nucleos_de() {      # lista de CPUs -> numero de nucleos fisicos distintos
+    local c k vis=" " n=0
+    for c in $1; do
+        k="$(cat "$SYSCPU/cpu$c/topology/physical_package_id" 2>/dev/null):$(cat "$SYSCPU/cpu$c/topology/core_id" 2>/dev/null)"
+        case "$vis" in *" $k "*) ;; *) vis="$vis$k "; n=$((n + 1)) ;; esac
+    done
+    echo "$n"
+}
+probar_paso() {     # probar_paso <nombre> <opciones de srun>: una linea en geometria_pasos.txt
+    local nom="$1"; shift
+    local out rc lista cpus nl nn vb
+    out=$(timeout 30 srun --mpi=pmix "$@" grep -E '^Cpus_allowed_list' /proc/self/status < /dev/null 2> ".paso_$nom.err")
+    rc=$?
+    lista=$(echo "$out" | awk '/Cpus_allowed_list/ {print $2; exit}')
+    cpus=$(cpus_de_lista "$lista")
+    nl=$(echo $cpus | wc -w)
+    nn=$(nucleos_de "$cpus")
+    vb=$(grep -cE "task +[0-9]+ +[0-9]+ \[[0-9]+\]: mask 0x" ".paso_$nom.err" 2>/dev/null)
+    echo "$nom rc=$rc cpus=${lista:-ninguno} logicos=$nl nucleos=$nn linea_mask=${vb:-0} opciones=$*" >> geometria_pasos.txt
+    grep -v '^ *$' ".paso_$nom.err" 2>/dev/null | head -5 | sed 's/^/    /' >> geometria_pasos.txt
+    rm -f ".paso_$nom.err"
+}
+PASO_VARIANTE="fijo"
+if [ "${PASO_MODO:-}" = "auto" ]; then
+    : > geometria_pasos.txt
+    probar_paso hint  --ntasks=1 --cpus-per-task="$NHILOS" --hint=nomultithread --cpu-bind=verbose
+    probar_paso tpc   --ntasks=1 --cpus-per-task="$NHILOS" --threads-per-core=1 --cpu-bind=verbose,cores
+    probar_paso base  --ntasks=1 --cpus-per-task="$NHILOS" --cpu-bind=verbose,cores
+    probar_paso doble --ntasks=1 --cpus-per-task=$((2 * NHILOS)) --cpu-bind=verbose,cores
+    # La primera que funciona con 1 hilo de hardware por nucleo; si ninguna, la primera con
+    # HILOS nucleos aunque use los 2 hilos de cada uno (OMP_PLACES=cores pone 1 hilo por nucleo).
+    PASO_VARIANTE=$(awk -v p="$NHILOS" '
+        /^[a-z]+ rc=/ { ok = 1; lg = nu = vb = -1
+            for (i = 2; i <= NF; i++) { split($i, a, "=")
+                if (a[1] == "rc" && a[2] != "0") ok = 0
+                if (a[1] == "logicos") lg = a[2]; if (a[1] == "nucleos") nu = a[2]; if (a[1] == "linea_mask") vb = a[2] }
+            if (ok && vb >= 1 && nu == p) { if (lg == p && uno == "") uno = $1; if (cual == "") cual = $1 } }
+        END { print (uno != "" ? uno : (cual != "" ? cual : "ninguna")) }' geometria_pasos.txt)
+    case "$PASO_VARIANTE" in
+        hint)  GEOM="--ntasks=1 --cpus-per-task=$NHILOS --hint=nomultithread"; BIND="--cpu-bind=verbose" ;;
+        tpc)   GEOM="--ntasks=1 --cpus-per-task=$NHILOS --threads-per-core=1" ;;
+        base)  GEOM="--ntasks=1 --cpus-per-task=$NHILOS" ;;
+        doble) GEOM="--ntasks=1 --cpus-per-task=$((2 * NHILOS))" ;;
+        *)     cat geometria_pasos.txt
+               kill "$MONITOR" 2>/dev/null
+               terminar 4 "FALLA_geometria_(ningun_paso_de_srun_dio_${NHILOS}_nucleos_fisicos,_ver_geometria_pasos.txt)" ;;
+    esac
+    echo "paso_variante=$PASO_VARIANTE" >> entorno.txt
+    echo "---- pruebas del paso de srun (elegida: $PASO_VARIANTE) ----"
+    cat geometria_pasos.txt
+fi
+
 # ------------------------------------------------------------- 5. VASP
 : > .motivo
 : > hilos_crudo.txt
 : > progreso.txt
 INICIO_SRUN=$SECONDS
 T0=$(date +%s.%N)
-srun --mpi=pmix $GEOM --cpu-bind=verbose,cores vasp_std < /dev/null > vasp.out 2> vasp.err &
+srun --mpi=pmix $GEOM $BIND vasp_std < /dev/null > vasp.out 2> vasp.err &
 SRUN_PID=$!
 trap 'detener limite_de_tiempo' USR1
 vigilante &
@@ -480,6 +548,7 @@ NMASK=$(grep -o "mask 0x[0-9a-fA-F]*" vasp.err 2>/dev/null | sort -u | wc -l)
     echo "wall_s=$WALL"
     echo "rc_srun=$RC"
     echo "detenida_por=${MOTIVO:-no}"
+    echo "paso_variante=$PASO_VARIANTE"
     echo "ntasks=$NTASKS"
     echo "cpus_per_task=$CPT"
     echo "hilos=$NHILOS"

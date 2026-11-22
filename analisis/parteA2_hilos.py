@@ -28,8 +28,9 @@ import shutil
 import subprocess
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REG = os.path.join(REPO, "logs", "jobs_A2h.txt")
-GEO = os.path.join(REPO, "datos", "parteA2_geometria.txt")
+REG1 = os.path.join(REPO, "logs", "jobs_A2h.txt")      # intento 1 (variante B)
+REG2 = os.path.join(REPO, "logs", "jobs_A2h2.txt")     # intento 2 (nucleos como la A.1 + paso automatico)
+REG = REG2 if os.path.isfile(REG2) else REG1
 CONFIG = os.path.join(REPO, "datos", "parteA2_config.txt")
 P_BARRIDO = [2, 4, 8, 12, 16, 24]
 REPETICIONES = 3
@@ -125,9 +126,9 @@ def resumen_pila(ruta):
         len(bloques), n_ob, n_omp, len(bloques) - n_ob - n_omp)
 
 
-def evaluar(t_ref):
+def evaluar(t_ref, reg=None):
     filas = []
-    for l in leer(REG).splitlines():
+    for l in leer(reg or REG).splitlines():
         p = l.split()
         if len(p) < 3:
             continue
@@ -163,6 +164,7 @@ def evaluar(t_ref):
         f["openblas_ver"] = ent.get("openblas_version")
         f["fftlib"] = ent.get("cadena_fftlib_en_vasp")
         f["nodo"] = (ent.get("nodo") or "-").split(".")[0]
+        f["paso"] = tie.get("paso_variante") or ent.get("paso_variante") or "-"
         f["nuc_mascara"] = num(tie.get("nucleos_fisicos_distintos"), int) or None
         f["intervalos"] = num(tie.get("hilos_intervalos"), int) or 0
         f["activos"] = num(tie.get("hilos_activos_mediana")) if f["intervalos"] else None
@@ -244,15 +246,20 @@ def proyectar(filas, E, t_ref, t1):
     return res
 
 
-def imprimir(filas, t_ref, t1, n1, eleccion, proy, geo):
+def imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1):
     print("Diagnostico de OpenMP, ronda 2 (Tarea A.2): hilos de OpenBLAS y espera de OpenMP")
     print()
+    if intento1:
+        print("Intento 1 (variante B: --threads-per-core=1): " + "; ".join(
+            "%s p=%d %s" % (f["E"], f["p"], resumen_intento1(f)) for f in intento1) + ".")
+        print("Intento 2 (este): nucleos pedidos como en la A.1 (--ntasks=p --hint=nomultithread) y paso de srun")
+        print("elegido en cada corrida por su mascara real.")
+        print()
     for E in ("E0", "E1", "E2", "E3"):
         print("  %s : %s" % (E, ENTORNO[E][0]))
-    print("  (1 proceso, variante B: --threads-per-core=1%s)" % (" + srun --threads-per-core=1" if geo.get("paso_tpc") == "1" else ""))
     print()
-    cab = "%-4s %-3s %-8s %-8s %-9s %-6s %-5s %-9s %-7s %-9s %s" % (
-        "Ent", "p", "Job", "Mascara", "Activos", "UsoCPU", "Iter", "t/iter", "S_iter", "Veredicto", "Detalle")
+    cab = "%-4s %-3s %-8s %-5s %-8s %-8s %-6s %-5s %-9s %-7s %-9s %s" % (
+        "Ent", "p", "Job", "Paso", "Mascara", "Activos", "UsoCPU", "Iter", "t/iter", "S_iter", "Veredicto", "Detalle")
     print(cab)
     print("-" * len(cab))
     for f in filas:
@@ -262,15 +269,17 @@ def imprimir(filas, t_ref, t1, n1, eleccion, proy, geo):
             ti = "> %d s" % f["sin_iter_en"]
         else:
             ti = "-"
-        print("%-4s %-3s %-8s %-8s %-9s %-6s %-5s %-9s %-7s %-9s %s" % (
-            f["E"], f["p"], f["jobid"] if f["jobid"] != "RECHAZADO" else "-",
+        print("%-4s %-3s %-8s %-5s %-8s %-8s %-6s %-5s %-9s %-7s %-9s %s" % (
+            f["E"], f["p"], f["jobid"] if f["jobid"] != "RECHAZADO" else "-", (f.get("paso") or "-")[:5],
             "-" if f.get("nuc_mascara") is None else "%d/%d" % (f["nuc_mascara"], f["p"]),
             "-" if f.get("activos") is None else "%g/%d" % (f["activos"], f["p"]),
             "-" if f.get("uso") is None else "%.2f" % f["uso"],
             "-" if f.get("n_iter") is None else f["n_iter"], ti,
             "-" if f.get("S_iter") is None else "%.2f" % f["S_iter"], f["veredicto"], f["motivo"]))
     print()
-    print("Mascara = nucleos fisicos del proceso / hilos. Activos = mediana de hilos con >= 50 % de un CPU.")
+    print("Paso = forma de srun elegida por su mascara real (hint = --hint=nomultithread, tpc = --threads-per-core=1,")
+    print("doble = 2 hilos de hardware por nucleo). Mascara = nucleos fisicos del proceso / hilos.")
+    print("Activos = mediana de hilos con >= 50 % de un CPU.")
     print("UsoCPU = CPUs que usa el proceso (mediana). S_iter = t por iteracion con 1 hilo / t por iteracion.")
     print("PASA = mascara de p nucleos, sin hilos de mas y no mas lenta que con 1 hilo.")
     if t_ref:
@@ -314,10 +323,24 @@ def imprimir(filas, t_ref, t1, n1, eleccion, proy, geo):
         print("Escrito en datos/parteA2_config.txt. Para guardar la evidencia en Git:")
         print("  python3 analisis/parteA2_hilos.py --guardar")
     else:
+        geo = [f for f in filas if (f.get("estado") or "").startswith("FALLA_geometria") and f.get("dir")]
+        if geo:
+            print("Pruebas del paso de srun en %s p=%d (geometria_pasos.txt):" % (geo[0]["E"], geo[0]["p"]))
+            for l in leer(os.path.join(geo[0]["dir"], "geometria_pasos.txt")).splitlines():
+                if "PMIX ERROR" not in l:
+                    print("  " + l[:150])
         print("Ningun entorno paso con p = 4 y p = 24: no envies el barrido y mandame una captura.")
 
 
-def guardar(filas, t_ref, t1, eleccion, proy, geo):
+def resumen_intento1(f):
+    if f["veredicto"] == "OMITIDA":
+        return "omitida"
+    if f.get("nuc_mascara"):
+        return "mascara %d/%d, %s" % (f["nuc_mascara"], f["p"], (f.get("estado") or "-").split("_(")[0].replace("FALLA_", ""))
+    return f["veredicto"].lower()
+
+
+def guardar(filas, t_ref, t1, eleccion, proy, intento1):
     dd = os.path.join(REPO, "datos")
     os.path.isdir(dd) or os.makedirs(dd)
     cols = ["E", "p", "jobid", "nodo", "alloc", "nuc_mascara", "hilos_vasp", "hilos_totales", "activos", "uso",
@@ -327,14 +350,21 @@ def guardar(filas, t_ref, t1, eleccion, proy, geo):
         w.writerow(cols)
         for f in filas:
             w.writerow(["" if f.get(c) is None else (("%.3f" % f[c]) if isinstance(f[c], float) else f[c]) for c in cols])
-    md = [u"# Tarea A.2 - diagnostico de OpenMP, ronda 2 (hilos de OpenBLAS y espera de OpenMP)", u"",
-          u"1 proceso con p hilos, variante B (`--threads-per-core=1`%s), NELM = 4, en una sola cadena."
-          % (u" + `srun --threads-per-core=1`" if geo.get("paso_tpc") == "1" else u""), u"",
-          u"| Entorno | Variables | p | Mascara (nucleos) | Hilos activos (mediana) | Uso de CPU | Iteraciones | t/iter (s) | S por iteracion | Veredicto |",
-          u"|---|---|---|---|---|---|---|---|---|---|"]
+    md = [u"# Tarea A.2 - diagnostico de OpenMP, ronda 2 (hilos de OpenBLAS y espera de OpenMP)", u""]
+    if intento1:
+        md += [u"Intento 1, variante B (`--ntasks=1 --cpus-per-task=p --threads-per-core=1`): " + u"; ".join(
+            u"%s p=%d %s" % (f["E"], f["p"], resumen_intento1(f)) for f in intento1) +
+            u". La mascara se reviso al arrancar y las corridas se detuvieron en segundos.", u""]
+    md += [u"Intento 2: 1 proceso con p hilos; nucleos pedidos como en la A.1 (`--ntasks=p --cpus-per-task=1 "
+           u"--hint=nomultithread`); antes de VASP se prueban varias formas de lanzar el paso con srun y se usa la "
+           u"primera cuya mascara real tiene p nucleos fisicos (`geometria_pasos.txt` de cada corrida). NELM = 4, "
+           u"en una sola cadena.", u"",
+          u"| Entorno | Variables | p | Paso de srun | Mascara (nucleos) | Hilos activos (mediana) | Uso de CPU | Iteraciones | t/iter (s) | S por iteracion | Veredicto |",
+          u"|---|---|---|---|---|---|---|---|---|---|---|"]
     for f in filas:
-        md.append(u"| %s | %s | %d | %s | %s | %s | %s | %s | %s | %s: %s |" % (
-            f["E"], ENTORNO.get(f["E"], ("?",))[0], f["p"], f.get("nuc_mascara") if f.get("nuc_mascara") is not None else "-",
+        md.append(u"| %s | %s | %d | %s | %s | %s | %s | %s | %s | %s | %s: %s |" % (
+            f["E"], ENTORNO.get(f["E"], ("?",))[0], f["p"], f.get("paso") or "-",
+            f.get("nuc_mascara") if f.get("nuc_mascara") is not None else "-",
             "-" if f.get("activos") is None else "%g" % f["activos"], "-" if f.get("uso") is None else "%.2f" % f["uso"],
             "-" if f.get("n_iter") is None else f["n_iter"], "-" if not f.get("t_iter_s") else "%.1f" % f["t_iter_s"],
             "-" if not f.get("S_iter") else "%.2f" % f["S_iter"], f["veredicto"], f["motivo"]))
@@ -354,7 +384,8 @@ def guardar(filas, t_ref, t1, eleccion, proy, geo):
     with io.open(os.path.join(dd, "parteA2_hilos.md"), "w", encoding="utf-8") as fh:
         fh.write(u"\n".join(md) + u"\n")
     if eleccion and proy:
-        lineas = [u"variante=B", u"paso_tpc=%s" % geo.get("paso_tpc", "0"), u"entorno=%s" % eleccion,
+        pasos = sorted(set(f.get("paso") for f in (ver(filas, eleccion, 4), ver(filas, eleccion, 24)) if f))
+        lineas = [u"variante=C", u"paso_modo=auto", u"paso_probado=%s" % ",".join(pasos), u"entorno=%s" % eleccion,
                   u"blas_hilos=%s" % ENTORNO[eleccion][1], u"espera_omp=%s" % ENTORNO[eleccion][2],
                   u"p_max=24", u"f_amdahl=%.4f" % proy["f"], u"t1_s=%.1f" % t1, u"costo_estimado_h=%.1f" % proy["costo"]]
         lineas += [u"limite_p%d=%s" % (p, proy["lim"][p]) for p in P_BARRIDO]
@@ -374,7 +405,8 @@ def guardar_evidencia(filas):
         dst = os.path.join(base, os.path.basename(d))
         os.path.isdir(dst) or os.makedirs(dst)
         for a in ("tiempo.txt", "entorno.txt", "afinidad.txt", "hilos.txt", "hilos_crudo.txt", "progreso.txt",
-                  "slurm_job.txt", "carga.txt", "variables.txt", "topologia.txt", "pila_hilos.txt", "OSZICAR"):
+                  "slurm_job.txt", "carga.txt", "variables.txt", "topologia.txt", "pila_hilos.txt",
+                  "geometria_pasos.txt", ".afinidad_inicio.txt", "OSZICAR"):
             if os.path.isfile(os.path.join(d, a)):
                 shutil.copy(os.path.join(d, a), os.path.join(dst, a))
         err = leer(os.path.join(d, "vasp.err")).splitlines()
@@ -403,22 +435,22 @@ def main():
     if not os.path.isfile(REG):
         print("Todavia no se envio la ronda 2: primero  bash slurm/parteA2_hilos.sh")
         return
-    geo = clave_valor(GEO)
     t_ref, t1, n1 = referencia_a1()
     filas = evaluar(t_ref)
+    intento1 = evaluar(t_ref, REG1) if (REG == REG2 and os.path.isfile(REG1)) else []
     pend = [f for f in filas if f["veredicto"] == "EN CURSO"]
     eleccion = None if pend else elegir(filas)
     proy = proyectar(filas, eleccion, t_ref, t1) if eleccion else None
-    imprimir(filas, t_ref, t1, n1, eleccion, proy, geo)
+    imprimir(filas, t_ref, t1, n1, eleccion, proy, intento1)
     if a.guardar:
         print()
         if pend:
             print("No se guarda nada mientras haya corridas en cola o corriendo.")
             return
-        guardar(filas, t_ref, t1, eleccion, proy, geo)
-        guardar_evidencia(filas)
+        guardar(filas, t_ref, t1, eleccion, proy, intento1)
+        guardar_evidencia(filas + intento1)
     elif not pend:
-        guardar(filas, t_ref, t1, eleccion, proy, geo)
+        guardar(filas, t_ref, t1, eleccion, proy, intento1)
 
 
 if __name__ == "__main__":

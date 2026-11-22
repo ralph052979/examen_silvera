@@ -177,6 +177,7 @@ def corridas(reg, prefijo, excl, solo_p=None, origen="A.2"):
         c["muestras"] = num(tie.get("hilos_muestras"), int) or 0
         c["nuc_hilos"] = num(tie.get("nucleos_fisicos_hilos"), int)
         c["activos"] = num(tie.get("hilos_activos_mediana"))
+        c["paso"] = tie.get("paso_variante")
         c["uso_cpu"] = num(tie.get("uso_cpu_mediana"))
         aj = tie.get("carga_ajena_max", "")
         m = re.match(r"(\d+)/(\d+)", aj)
@@ -210,6 +211,9 @@ def analizar(runs):
         if len(vals) > 1:
             avisos.append("%s distinto entre corridas: %s (el trabajo no es identico; ver t por iteracion)"
                           % (nombre, ", ".join(str(v) for v in vals)))
+    pasos = sorted(set(c.get("paso") for c in buenas if c.get("paso") and c["p"] > 1))
+    if len(pasos) > 1:
+        avisos.append("las corridas usaron formas distintas de lanzar el paso de srun: %s (ver geometria_pasos.txt)" % ", ".join(pasos))
     cpus = sorted(set(c.get("cpu") for c in buenas if c.get("cpu")))
     if len(cpus) > 1:
         avisos.append("las corridas cayeron en nodos con procesadores distintos: " + " | ".join(cpus))
@@ -301,7 +305,7 @@ def imprimir(runs, filas, avisos, faltan, var):
 def guardar_csv(runs, filas, var):
     os.path.isdir(os.path.join(REPO, "datos")) or os.makedirs(os.path.join(REPO, "datos"))
     c1 = ["orden", "origen", "p", "r", "jobid", "nodo", "cpu", "estado", "excluida", "socket", "alloc", "afinidad_ok",
-          "muestras", "nuc_hilos", "activos", "uso_cpu", "carga_ajena", "wall_s", "elapsed_s", "n_iter", "t_iter_s", "ranks", "hilos_vasp",
+          "muestras", "nuc_hilos", "activos", "uso_cpu", "paso", "carga_ajena", "wall_s", "elapsed_s", "n_iter", "t_iter_s", "ranks", "hilos_vasp",
           "nkpts", "nbands", "mem_mb", "toten", "e_sigma0", "git_hash", "version"]
     with io.open(os.path.join(REPO, "datos", "parteA2_corridas.csv"), "w", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\n")
@@ -342,7 +346,7 @@ def guardar_evidencia(runs):
         dst = os.path.join(base, os.path.basename(c["dir"]))
         os.path.isdir(dst) or os.makedirs(dst)
         for a in ("tiempo.txt", "entorno.txt", "afinidad.txt", "hilos.txt", "hilos_crudo.txt", "progreso.txt", "carga.txt",
-                  "OSZICAR", "modulos.txt", "entradas.md5", "slurm_job.txt", "variables.txt"):
+                  "OSZICAR", "modulos.txt", "entradas.md5", "slurm_job.txt", "variables.txt", "geometria_pasos.txt"):
             if os.path.isfile(os.path.join(c["dir"], a)):
                 shutil.copy(os.path.join(c["dir"], a), os.path.join(dst, a))
         lin = leer(os.path.join(c["dir"], "OUTCAR")).splitlines()
@@ -366,9 +370,8 @@ def main():
     a = ap.parse_args()
     var = clave_valor(os.path.join(REPO, "datos", "parteA2_config.txt"))
     pmax = num(var.get("p_max"), int) or 24
-    desc = "variante %s, entorno %s: OPENBLAS_NUM_THREADS=%s, OMP_WAIT_POLICY=%s" % (
-        var.get("variante", "?"), var.get("entorno", "?"), var.get("blas_hilos") or "sin fijar",
-        var.get("espera_omp") or "sin fijar")
+    desc = "nucleos como en la A.1, paso de srun automatico; entorno %s: OPENBLAS_NUM_THREADS=%s, OMP_WAIT_POLICY=%s" % (
+        var.get("entorno", "?"), var.get("blas_hilos") or "sin fijar", var.get("espera_omp") or "sin fijar")
     runs2 = corridas(os.path.join(REPO, "logs", "jobs_A2.txt"), "ex_A2",
                      os.path.join(REPO, "datos", "parteA2_excluidas.txt"), origen="A.2")
     if not runs2:

@@ -5,11 +5,18 @@
 #
 #  Hallazgo de la ronda 1: con p CPUs para p hilos, VASP no termino 4 iteraciones
 #  en 20 min; con 2p CPUs (D4) termino, pero mas lento que con 1 hilo, y ps mostro
-#  p + 1 hilos trabajando. Hipotesis: OpenBLAS (compilado con pthreads) lanza su
-#  propio hilo, que compite con los de OpenMP; como libgomp espera girando, quitarle
-#  el nucleo a un solo hilo frena a todos.
+#  p + 1 hilos trabajando. Hipotesis: OpenBLAS (sin OpenMP) lanza su propio hilo,
+#  que compite con los de OpenMP; como libgomp espera girando, quitarle el nucleo a
+#  un solo hilo frena a todos.
 #
-#  Diseno 2 x 2 con p = 4 (1 proceso, variante B: --threads-per-core=1):
+#  Intento 1 (2026-11-22, logs/jobs_A2h.txt): con la variante B el paso de E1 p = 4
+#  recibio 2 nucleos fisicos para 4 hilos y se detuvo al arrancar; las demas igual.
+#  Intento 2 (este script, logs/jobs_A2h2.txt): el job pide los nucleos igual que la
+#  A.1 (--ntasks=p --hint=nomultithread: p nucleos fisicos verificados, cobra p CPUs)
+#  y vasp_job.sh (PASO_MODO=auto) prueba antes de VASP varias formas de lanzar 1
+#  proceso con p hilos y usa la primera cuya mascara real tiene p nucleos fisicos.
+#
+#  Diseno 2 x 2 con p = 4:
 #      E0 : entorno de la ronda 1 (control; se guarda la pila de los hilos con gdb)
 #      E1 : OPENBLAS_NUM_THREADS=1                       (OpenBLAS sin hilos propios)
 #      E2 : OMP_WAIT_POLICY=PASSIVE                      (OpenMP espera durmiendo)
@@ -27,8 +34,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO" || exit 1
 
 PARTICION="${PARTICION:-phys_fast}"
-REG=logs/jobs_A2h.txt
-GEO=datos/parteA2_geometria.txt
+REG=logs/jobs_A2h2.txt
 NODO_MALO=granado-compute-18
 MAX_PRIMERA="${MAX_PRIMERA:-420}"     # segundos; solo se cambia en pruebas
 falla() { echo "  [FALLA] $1"; echo; echo "Mandame una captura."; exit 1; }
@@ -41,37 +47,37 @@ for f in INCAR KPOINTS POSCAR; do
 done
 [ -s entradas/POTCAR ] || falla "falta entradas/POTCAR"
 [ -s lib/libfftw3_omp.so.3 ] && [ -s lib/libfftw3.so.3 ] || falla "faltan las librerias de lib/"
-grep -q "hilos_activos_mediana" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior (descomprime el paquete nuevo y corre bash slurm/parteA2_preparar.sh)"
+grep -q "PASO_MODO" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior (descomprime el paquete nuevo y corre bash slurm/parteA2_preparar.sh)"
 [ -d .git ] || falla "no hay repositorio git"
 if [ -n "$(git status --porcelain -- entradas slurm analisis README.md)" ]; then
     git status --short -- entradas slurm analisis README.md
     falla "hay cambios sin guardar en Git (corre primero: bash slurm/parteA2_preparar.sh)"
 fi
-[ -s "$GEO" ] || falla "falta $GEO: primero  python3 analisis/parteA2_diagnostico.py --guardar"
-git ls-files --error-unmatch "$GEO" >/dev/null 2>&1 || falla "$GEO no esta en Git: corre  python3 analisis/parteA2_diagnostico.py --guardar"
-TPC=$(grep '^paso_tpc=' "$GEO" | cut -d= -f2)
-case "$TPC" in 0|1) ;; *) falla "paso_tpc invalido en $GEO" ;; esac
 mkdir -p logs corridas
 if [ -s "$REG" ] && [ "${FORZAR:-0}" != "1" ]; then
     cat "$REG"
-    falla "la ronda 2 ya se envio. Estado: bash slurm/parteA2_estado.sh  |  resultado: python3 analisis/parteA2_hilos.py"
+    falla "el intento 2 de la ronda 2 ya se envio. Estado: bash slurm/parteA2_estado.sh  |  resultado: python3 analisis/parteA2_hilos.py"
 fi
 [ -s "$REG" ] && mv "$REG" "$REG.$(date +%Y%m%d%H%M%S)"
-echo "  [OK] caso base, POTCAR, librerias, Git y resultado de la ronda 1 en orden"
+if command -v squeue >/dev/null 2>&1 && [ -s logs/jobs_A2h.txt ]; then
+    for J in $(awk '$3 ~ /^[0-9]+$/ {print $3}' logs/jobs_A2h.txt); do
+        [ -n "$(squeue -h -j "$J" -o %i 2>/dev/null)" ] && falla "el job $J del intento 1 sigue en cola o corriendo: espera a que termine (bash slurm/parteA2_estado.sh)"
+    done
+fi
+echo "  [OK] caso base, POTCAR, librerias y Git en orden; nada del intento 1 sigue en cola"
 
 EXCL=""
 if command -v sinfo >/dev/null 2>&1 && [ -n "$(sinfo -h -N -n "$NODO_MALO" -o %N 2>/dev/null)" ]; then
     EXCL="--exclude=$NODO_MALO"
 fi
 HASH=$(git rev-parse --short HEAD)
-EXTRA_TPC=""
-[ "$TPC" = "1" ] && EXTRA_TPC=",PASO_TPC=1"
 
 echo
-echo "Se enviaran 6 corridas CORTAS (NELM = 4) en una sola cadena:"
+echo "Se enviaran 6 corridas CORTAS (NELM = 4) en una sola cadena (intento 2):"
 echo "  p = 4 : E1 (OpenBLAS 1 hilo)  E3 (E1 + espera pasiva)  E2 (espera pasiva)  E0 (control)"
 echo "  p = 24: E1 y E3, cada una solo si paso con p = 4 (si no, se omite en segundos)"
-echo "  variante B (--threads-per-core=1)$( [ "$TPC" = "1" ] && echo " + srun --threads-per-core=1"), particion $PARTICION, commit $HASH ${EXCL:+(se excluye $NODO_MALO)}"
+echo "  nucleos pedidos como en la A.1 (--ntasks=p --hint=nomultithread); el paso de srun se elige"
+echo "  en cada corrida por su mascara real; particion $PARTICION, commit $HASH ${EXCL:+(se excluye $NODO_MALO)}"
 echo "  costo estimado: 3-6 h-nucleo; duracion: 30-45 min mas la espera en cola"
 echo "  Es normal que E0 (y quiza E2) falle: es el control que reproduce el problema."
 read -r -p "Escribe s y Enter para enviar: " RESP
@@ -83,9 +89,9 @@ enviar() {   # enviar <etiqueta> <p> <variables extra>
     local E="$1" p="$2" VARS="$3" DEP="" OUT RC J
     [ -n "$PREV" ] && DEP="--dependency=afterany:$PREV"
     OUT=$(sbatch --parsable --job-name="ex_A2h_${E}_p${p}" --partition="$PARTICION" --nodes=1 \
-                 --ntasks=1 --cpus-per-task="$p" --threads-per-core=1 \
+                 --ntasks="$p" --cpus-per-task=1 --hint=nomultithread \
                  --mem=8G --time=00:15:00 $EXCL $DEP \
-                 --export=ALL,CASO=caso_base,GIT_HASH="$HASH",NELM_DIAG=4,HILOS="$p",MAX_PRIMERA_ITER=$MAX_PRIMERA$EXTRA_TPC$VARS \
+                 --export=ALL,CASO=caso_base,GIT_HASH="$HASH",NELM_DIAG=4,HILOS="$p",PASO_MODO=auto,MAX_PRIMERA_ITER=$MAX_PRIMERA$VARS \
                  slurm/vasp_job.sh 2>&1)
     RC=$?
     J=$(echo "$OUT" | tail -1); J="${J%%;*}"

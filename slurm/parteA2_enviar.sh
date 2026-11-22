@@ -45,21 +45,20 @@ git ls-files --error-unmatch "$VARF" >/dev/null 2>&1 || falla "$VARF no esta en 
 git diff --quiet HEAD -- "$VARF" || falla "$VARF cambio despues del commit: corre  python3 analisis/parteA2_hilos.py --guardar"
 VAR=$(grep '^variante=' "$VARF" | cut -d= -f2)
 PMAX=$(grep '^p_max=' "$VARF" | cut -d= -f2)
-TPC=$(grep '^paso_tpc=' "$VARF" | cut -d= -f2)
 ENT=$(grep '^entorno=' "$VARF" | cut -d= -f2)
 BLAS=$(grep '^blas_hilos=' "$VARF" | cut -d= -f2)
 ESPERA=$(grep '^espera_omp=' "$VARF" | cut -d= -f2)
 COSTO=$(grep '^costo_estimado_h=' "$VARF" | cut -d= -f2)
-[ "$VAR" = "B" ] || falla "variante desconocida en $VARF: '$VAR'"
+MODO_PASO=$(grep '^paso_modo=' "$VARF" | cut -d= -f2)
+[ "$VAR" = "C" ] || falla "variante desconocida en $VARF: '$VAR' (vuelve a correr python3 analisis/parteA2_hilos.py --guardar)"
+[ "$MODO_PASO" = "auto" ] || falla "paso_modo invalido en $VARF"
 echo "$PMAX" | grep -qE '^[0-9]+$' || falla "p_max invalido en $VARF"
-case "$TPC" in 0|1) ;; *) falla "paso_tpc invalido en $VARF" ;; esac
 for p in 2 4 8 12 16 24; do
     [ "$p" -le "$PMAX" ] || continue
     tiempo_p "$p" | grep -qE '^[0-9]{2}:[0-9]{2}:[0-9]{2}$' || falla "falta limite_p$p en $VARF"
 done
 awk -v c="${COSTO:-999}" -v m="$COSTO_MAX" 'BEGIN { exit !(c + 0 <= m) }' || falla "el barrido costaria ${COSTO:-?} h-nucleo (mas de $COSTO_MAX): mandame una captura antes de enviarlo"
-VARS_ENT=",MAX_PRIMERA_ITER=$MAX_PRIMERA"
-[ "$TPC" = "1" ]     && VARS_ENT="$VARS_ENT,PASO_TPC=1"
+VARS_ENT=",MAX_PRIMERA_ITER=$MAX_PRIMERA,PASO_MODO=auto"
 [ -n "$BLAS" ]       && VARS_ENT="$VARS_ENT,BLAS_HILOS=$BLAS"
 [ -n "$ESPERA" ]     && VARS_ENT="$VARS_ENT,ESPERA_OMP=$ESPERA"
 for f in INCAR KPOINTS POSCAR; do
@@ -67,7 +66,7 @@ for f in INCAR KPOINTS POSCAR; do
 done
 [ -s entradas/POTCAR ] || falla "falta entradas/POTCAR"
 [ -s lib/libfftw3_omp.so.3 ] && [ -s lib/libfftw3.so.3 ] || falla "faltan las librerias de lib/"
-grep -q "hilos_activos_mediana" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior (descomprime el paquete nuevo y corre bash slurm/parteA2_preparar.sh)"
+grep -q "PASO_MODO" slurm/vasp_job.sh || falla "slurm/vasp_job.sh es una version anterior (descomprime el paquete nuevo y corre bash slurm/parteA2_preparar.sh)"
 if [ -n "$(git status --porcelain -- entradas slurm analisis README.md)" ]; then
     git status --short -- entradas slurm analisis README.md
     falla "hay cambios sin guardar en Git (corre primero: bash slurm/parteA2_preparar.sh)"
@@ -114,7 +113,8 @@ HASH=$(git rev-parse --short HEAD)
 echo
 echo "Se enviaran $N corridas en una sola cadena (r = repeticion, p = hilos OpenMP de 1 proceso):"
 echo "  $(echo $PLAN | sed 's/\([0-9]*\):\([0-9]*\)/r\1:p\2/g')"
-echo "  variante $VAR$( [ "$TPC" = "1" ] && echo " + srun --threads-per-core=1"), entorno $ENT (OPENBLAS_NUM_THREADS=${BLAS:-sin fijar}, OMP_WAIT_POLICY=${ESPERA:-sin fijar})"
+echo "  nucleos como en la A.1 (--ntasks=p --hint=nomultithread) y paso de srun elegido por su mascara real"
+echo "  entorno $ENT (OPENBLAS_NUM_THREADS=${BLAS:-sin fijar}, OMP_WAIT_POLICY=${ESPERA:-sin fijar})"
 echo "  particion $PARTICION, commit $HASH ${EXCL:+(se excluye $NODO_MALO)}"
 echo "  t(1) se toma de las 3 corridas con p = 1 de la A.1 (mismo calculo: 1 proceso, 1 hilo)"
 if [ "$MODO" = "todas" ]; then
@@ -133,7 +133,7 @@ if [ "$MODO" = "faltantes" ]; then
 fi
 for item in $PLAN; do
     r="${item%%:*}"; p="${item##*:}"
-    OPTS="--ntasks=1 --cpus-per-task=$p --threads-per-core=1"
+    OPTS="--ntasks=$p --cpus-per-task=1 --hint=nomultithread"
     DEP=""
     [ -n "$PREV" ] && DEP="--dependency=afterany:$PREV"
     ID=$(sbatch --parsable --job-name="ex_A2_p${p}_r${r}" --partition="$PARTICION" --nodes=1 $OPTS \

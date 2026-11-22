@@ -49,8 +49,10 @@ if [ -s logs/jobs_A2d.txt ]; then
     echo
 fi
 
-if [ -s logs/jobs_A2h.txt ]; then
-    echo "=== Diagnostico de OpenMP, ronda 2 (hilos de OpenBLAS y espera de OpenMP) ==="
+REGH=logs/jobs_A2h.txt; INT=1
+[ -s logs/jobs_A2h2.txt ] && { REGH=logs/jobs_A2h2.txt; INT=2; }
+if [ -s "$REGH" ]; then
+    echo "=== Diagnostico de OpenMP, ronda 2, intento $INT (hilos de OpenBLAS y espera de OpenMP) ==="
     printf "%-4s %-3s %-9s %-11s %-12s %8s %-8s %-5s  %s\n" Ent p Job Slurm Nodo Minutos Activos Iter Resultado
     NC=0
     while read -r E P ID RESTO; do
@@ -74,7 +76,7 @@ if [ -s logs/jobs_A2h.txt ]; then
             [ -n "$A" ] && ACT="$A/$P"
         fi
         printf "%-4s %-3s %-9s %-11s %-12s %8s %-8s %-5s  %s\n" "$E" "$P" "$ID" "$ST" "${NODO:--}" "${MIN:--}" "$ACT" "${IT:--}" "$(echo "$RES" | cut -c1-60)"
-    done < logs/jobs_A2h.txt
+    done < "$REGH"
     echo
     if [ "$NC" -eq 0 ]; then
         echo "Ronda 2 terminada. Siguiente paso:  python3 analisis/parteA2_hilos.py"
@@ -120,4 +122,4 @@ if [ -s logs/jobs_A2.txt ]; then
     [ "$NMAL" -eq 0 ] || echo "Hay corridas con problema: mira logs/ex_A2_p<p>_r<r>_<Job>.out y mandame una captura."
 fi
 
-[ -s logs/jobs_A2d.txt ] || [ -s logs/jobs_A2h.txt ] || [ -s logs/jobs_A2.txt ] || echo "Todavia no hay corridas de la A.2."
+[ -s logs/jobs_A2d.txt ] || [ -s "$REGH" ] || [ -s logs/jobs_A2.txt ] || echo "Todavia no hay corridas de la A.2."

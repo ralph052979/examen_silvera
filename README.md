@@ -72,9 +72,14 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
 
 1. **Hyperthreading.** Slurm cuenta cada hilo como una CPU (`SelectTypeParameters = CR_CPU_MEMORY`).
    Con `--ntasks=p --hint=nomultithread` cada proceso MPI recibe un núcleo físico completo y
-   `AllocCPUS = p` (verificado en la A.1). Para hilos OpenMP, en cambio, `--cpus-per-task=p` entregó
-   solo p/2 núcleos físicos (2026-11-18): la forma correcta se elige con el diagnóstico de la A.2.
-   Cada script de envío pasa sus opciones de `--hint` o `--threads-per-core` de forma explícita.
+   `AllocCPUS = p` (verificado en la A.1). Para 1 proceso con p hilos, en cambio, el paso de `srun`
+   suele tomar los 2 hilos de hardware de p/2 núcleos: `--cpus-per-task=p` dio p/2 núcleos
+   (2026-11-18), `srun -n 1 -c 24` dentro del job de la A.1 dio 12 núcleos (C24, 2026-11-22) y la
+   variante B (`--threads-per-core=1`) dio 2 núcleos para 4 hilos (intento 1 de la ronda 2). Por eso,
+   en la A.2 el job pide los núcleos igual que la A.1 y `vasp_job.sh` (`PASO_MODO=auto`) prueba, con
+   un comando de 1 s, cuatro formas de lanzar el paso (`--hint=nomultithread`, `--threads-per-core=1`,
+   sin opciones y con 2p CPUs) y usa la primera cuya máscara **real** tiene p núcleos físicos
+   (`geometria_pasos.txt`). Cada script de envío pasa sus opciones de forma explícita.
 2. **Lanzador MPI.** `srun` sin opciones falla con OpenMPI 4.1.2 (`OPAL ERROR … pmix3x`) y `mpirun`
    ignora la asignación de Slurm (ata todos los procesos al núcleo 0). Se usa
    `srun --mpi=pmix --cpu-bind=verbose,cores`. Los avisos `PMIX ERROR: BAD-PARAM` son inofensivos;
@@ -227,12 +232,13 @@ una línea `JOBID motivo` a `datos/parteA1_excluidas.txt`; `--faltantes` la repi
 | C | `--ntasks=p --cpus-per-task=1 --hint=nomultithread` (la asignación de la A.1) y un solo proceso con `srun --ntasks=1 --cpus-per-task=p` | p = 4 y 24 |
 | D | `--ntasks=1 --cpus-per-task=2p --hint=multithread` (2 hilos de hardware por núcleo: cobra el doble) | p = 4 |
 
-Resultado (hallazgo 10 de la sección 2): ninguna variante sirve tal cual. Tabla, máscaras leídas de
-`vasp.err` y tiempos por iteración en `datos/parteA2_diagnostico.md`; la máscara de B decide si la ronda 2
-agrega `srun --threads-per-core=1` (`datos/parteA2_geometria.txt`).
+Resultado (hallazgos 1 y 10 de la sección 2): ninguna variante sirve tal cual. Tabla, máscaras leídas
+de `vasp.err` y tiempos por iteración en `datos/parteA2_diagnostico.md`.
 
-**Paso 2, diagnóstico ronda 2: hilos de OpenBLAS y espera de OpenMP.** Diseño 2 × 2 con p = 4
-(variante B), en una sola cadena:
+**Paso 2, diagnóstico ronda 2: hilos de OpenBLAS y espera de OpenMP.** El intento 1 usó la
+variante B: la máscara de E1 con p = 4 tuvo 2 núcleos físicos y la corrida se detuvo al arrancar
+(las demás, igual u omitidas). El intento 2 pide los núcleos como en la A.1 y elige el paso de `srun`
+por su máscara real (hallazgo 1). Diseño 2 × 2 con p = 4, en una sola cadena:
 
 | Entorno | Variables | Para qué |
 |---|---|---|
@@ -252,7 +258,7 @@ p, en `datos/parteA2_config.txt`.
 | Decisión | Valor | Justificación |
 |---|---|---|
 | Caso | `entradas/caso_base/` (K7), igual que en la A.1 | Solo cambia el número de hilos |
-| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; variante B; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` y el entorno elegido en el paso 2 | Memoria compartida pura; variables recomendadas para el binario OpenMP de VASP |
+| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; núcleos pedidos como en la A.1 y paso de `srun` elegido por su máscara real; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` y el entorno elegido en el paso 2 | Memoria compartida pura; mismos núcleos y mismo cobro que la A.1; variables recomendadas para el binario OpenMP de VASP |
 | t(1) | Las 3 corridas con p = 1 de la A.1 | 1 proceso con 1 hilo es exactamente el mismo cálculo |
 | Repeticiones | 3 por cada p (18 corridas), en una sola cadena | Igual que la A.1: sin competencia entre jobs propios |
 | Orden | r1: 2→24; r2: 24→2; r3: 8, 16, 2, 24, 4, 12 | Que la hora no se confunda con el efecto de p |
@@ -261,7 +267,7 @@ p, en `datos/parteA2_config.txt`.
 ```bash
 bash slurm/parteA2_preparar.sh                   # verifica y guarda los scripts en Git
 python3 analisis/parteA2_diagnostico.py --guardar   # ronda 1: evidencia y geometria
-bash slurm/parteA2_hilos.sh                      # ronda 2: 6 corridas cortas en cadena
+bash slurm/parteA2_hilos.sh                      # ronda 2 (intento 2): 6 corridas cortas en cadena
 bash slurm/parteA2_estado.sh                     # seguimiento
 python3 analisis/parteA2_hilos.py                # veredicto, entorno elegido y costo proyectado
 python3 analisis/parteA2_hilos.py --guardar
