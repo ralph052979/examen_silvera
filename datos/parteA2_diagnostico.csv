@@ -1,0 +1,7 @@
+variante,p,jobid,slurm,alloc,nuc_mascara,cpus_mascara,hilos_vasp,n_iter,t_iter_s,cpu_real,estado,veredicto,motivo
+A,4,529205,TIMEOUT,4,2,4,4,0,,,,NO PASA,mascara con 2 nucleos fisicos de 4; Slurm la corto (TIMEOUT): no termino las 4 iteraciones en 20 min
+B,4,529206,TIMEOUT,4,2,4,4,0,,,,NO PASA,mascara con 2 nucleos fisicos de 4; Slurm la corto (TIMEOUT): no termino las 4 iteraciones en 20 min
+C,4,529207,TIMEOUT,4,2,4,4,0,,,,NO PASA,mascara con 2 nucleos fisicos de 4; Slurm la corto (TIMEOUT): no termino las 4 iteraciones en 20 min
+D,4,529208,COMPLETED,8,4,8,4,4,130.158,4.886,OK,TERMINO,"mascara de 4 nucleos fisicos, 4 iteraciones completas"
+B,24,529209,TIMEOUT,24,12,24,24,0,,,,NO PASA,mascara con 12 nucleos fisicos de 24; Slurm la corto (TIMEOUT): no termino las 4 iteraciones en 20 min
+C,24,529210,TIMEOUT,24,12,24,24,0,,,,NO PASA,mascara con 12 nucleos fisicos de 24; Slurm la corto (TIMEOUT): no termino las 4 iteraciones en 20 min
