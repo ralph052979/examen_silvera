@@ -1,0 +1,6 @@
+candidato = K7
+malla = 10x10x3
+job = 529167
+t1_min = 32.36
+nodo = granado-compute-14.granado.uninorte.edu.co
+commit_entradas = 265ac0b
