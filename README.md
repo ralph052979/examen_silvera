@@ -71,7 +71,10 @@ Observaciones:
 Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_job.sh` ya los incorpora:
 
 1. **Hyperthreading.** Slurm cuenta cada hilo como una CPU (`SelectTypeParameters = CR_CPU_MEMORY`).
-   Con `--hint=nomultithread` cada proceso recibe un núcleo físico completo y `AllocCPUS = p`.
+   Con `--ntasks=p --hint=nomultithread` cada proceso MPI recibe un núcleo físico completo y
+   `AllocCPUS = p` (verificado en la A.1). Para hilos OpenMP, en cambio, `--cpus-per-task=p` entregó
+   solo p/2 núcleos físicos (2026-11-18): la forma correcta se elige con el diagnóstico de la A.2.
+   Cada script de envío pasa sus opciones de `--hint` o `--threads-per-core` de forma explícita.
 2. **Lanzador MPI.** `srun` sin opciones falla con OpenMPI 4.1.2 (`OPAL ERROR … pmix3x`) y `mpirun`
    ignora la asignación de Slurm (ata todos los procesos al núcleo 0). Se usa
    `srun --mpi=pmix --cpu-bind=verbose,cores`. Los avisos `PMIX ERROR: BAD-PARAM` son inofensivos;
@@ -90,7 +93,9 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
    demás esperan en cola aunque haya núcleos libres.
 9. **Afinidad.** Cada corrida verifica, con las máscaras de `srun --cpu-bind=verbose` y la topología
    de `/sys`, que cada proceso tenga exactamente `--cpus-per-task` núcleos **físicos** y que ningún
-   núcleo físico se comparta (`afinidad.txt`). Si no se cumple, la corrida se marca como fallida.
+   núcleo físico se comparta (`afinidad.txt`). Con OpenMP, además, mira con `ps -L` cada 10 s en qué
+   núcleos físicos corren de verdad los hilos de VASP (`hilos.txt`). Si algo no se cumple, la corrida
+   se marca como fallida.
 
 ---
 
@@ -118,9 +123,15 @@ examen_silvera/
     parteA1_preparar.sh             Tarea A.1: verifica el caso base y guarda los scripts en Git
     parteA1_enviar.sh               Tarea A.1: envia las 21 corridas en una cadena (o --faltantes)
     parteA1_estado.sh               Tarea A.1: estado de las corridas
+    parteA2_preparar.sh             Tarea A.2: verifica y guarda los scripts en Git
+    parteA2_diagnostico.sh          Tarea A.2: 6 corridas cortas para elegir como pedir los nucleos
+    parteA2_enviar.sh               Tarea A.2: envia el barrido OpenMP en una cadena (o --faltantes)
+    parteA2_estado.sh               Tarea A.2: estado del diagnostico y del barrido
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
+    parteA2_diagnostico.py          Tarea A.2: veredicto del diagnostico de OpenMP y variante elegida
+    parteA2_resumen.py              Tarea A.2: t(p) con media y desviacion estandar, S(p), E(p)
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I
   reporte/                          fuentes .tex y PDF
@@ -185,7 +196,48 @@ una línea `JOBID motivo` a `datos/parteA1_excluidas.txt`; `--faltantes` la repi
 
 ---
 
-## 6. Historial
+## 6. Parte A.2: escalamiento fuerte con OpenMP
+
+**Paso 1, diagnóstico.** Corridas cortas del caso base (`NELM = 4`) para elegir cómo pedir p núcleos
+físicos para p hilos:
+
+| Variante | Petición a Slurm | Probada con |
+|---|---|---|
+| A | `--ntasks=1 --cpus-per-task=p --hint=nomultithread` (la forma directa; falló el 2026-11-18) | p = 4 |
+| B | `--ntasks=1 --cpus-per-task=p --threads-per-core=1` | p = 4 y 24 |
+| C | `--ntasks=p --cpus-per-task=1 --hint=nomultithread` (la asignación de la A.1) y un solo proceso con `srun --ntasks=1 --cpus-per-task=p` | p = 4 y 24 |
+| D | `--ntasks=1 --cpus-per-task=2p --hint=multithread` (2 hilos de hardware por núcleo: cobra el doble y solo cabe hasta p = 12) | p = 4 |
+
+Una variante pasa si VASP corre con p hilos, la máscara del proceso tiene p núcleos físicos y los hilos
+corren de verdad en p núcleos físicos distintos. Se prefiere la que además cobra p CPUs y llega a
+p = 24 (C, luego B). El resultado queda en `datos/parteA2_diagnostico.md` y la variante elegida en
+`datos/parteA2_variante.txt`.
+
+**Paso 2, barrido.**
+
+| Decisión | Valor | Justificación |
+|---|---|---|
+| Caso | `entradas/caso_base/` (K7), igual que en la A.1 | Solo cambia el número de hilos |
+| Procesos e hilos | 1 proceso MPI con p hilos OpenMP, p = 2, 4, 8, 12, 16, 24; `OMP_PLACES=cores`, `OMP_PROC_BIND=close`, `OMP_STACKSIZE=512m` | Memoria compartida pura; variables recomendadas para el binario OpenMP de VASP |
+| t(1) | Las 3 corridas con p = 1 de la A.1 | 1 proceso con 1 hilo es exactamente el mismo cálculo |
+| Repeticiones | 3 por cada p (18 corridas), en una sola cadena | Igual que la A.1: sin competencia entre jobs propios |
+| Orden | r1: 2→24; r2: 24→2; r3: 8, 16, 2, 24, 4, 12 | Que la hora no se confunda con el efecto de p |
+| Verificaciones | Afinidad, hilos en p núcleos físicos, VASP con 1 proceso y p hilos, mismo trabajo, carga ajena, atípicas | Rúbrica: corrección técnica |
+
+```bash
+bash slurm/parteA2_preparar.sh                   # verifica y guarda los scripts en Git
+bash slurm/parteA2_diagnostico.sh                # paso 1: 6 corridas cortas
+bash slurm/parteA2_estado.sh                     # seguimiento
+python3 analisis/parteA2_diagnostico.py          # veredicto y variante elegida
+python3 analisis/parteA2_diagnostico.py --guardar
+bash slurm/parteA2_enviar.sh                     # paso 2: barrido en una cadena
+python3 analisis/parteA2_resumen.py              # t(p) media +/- desviacion, S(p), E(p)
+python3 analisis/parteA2_resumen.py --guardar
+```
+
+---
+
+## 7. Historial
 
 El primer caso base (monocapa 3×3 con V_Se, ENCUT = 500 eV, calibrado el 2026-11-17) y las pruebas
 del entorno de Granado quedaron en la carpeta `examen_silvera_monocapa/`, con su propio historial de
