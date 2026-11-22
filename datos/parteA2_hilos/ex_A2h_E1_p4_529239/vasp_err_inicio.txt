@@ -1,0 +1,9 @@
+cpu-bind=MASK - granado-compute-14, task  0  0 [65331]: mask 0x3000000003 set
+[granado-compute-14.granado.uninorte.edu.co:65331] PMIX ERROR: BAD-PARAM in file base/bfrop_base_unpack.c at line 692
+[granado-compute-14.granado.uninorte.edu.co:65331] PMIX ERROR: BAD-PARAM in file dstore_base.c at line 2225
+[granado-compute-14.granado.uninorte.edu.co:65331] PMIX ERROR: BAD-PARAM in file base/bfrop_base_unpack.c at line 692
+[granado-compute-14.granado.uninorte.edu.co:65331] PMIX ERROR: BAD-PARAM in file dstore_base.c at line 2225
+srun: forcing job termination
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+slurmstepd: error: *** STEP 529239.0 ON granado-compute-14 CANCELLED AT 2026-11-22T09:28:11 ***
+srun: error: granado-compute-14: task 0: Killed

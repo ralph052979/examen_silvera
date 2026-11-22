@@ -1,0 +1,5 @@
+ running    1 mpi-ranks, with   24 threads/rank
+|               ----> ADVICE to this user running VASP <----                  |
+      LOOP:  cpu time    622.5600: real time    211.6885
+      LOOP:  cpu time    633.1399: real time    215.6650
+      LOOP:  cpu time    646.8855: real time    221.2102

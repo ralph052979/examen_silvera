@@ -1,0 +1,7 @@
+E,p,jobid,nodo,alloc,nuc_mascara,hilos_vasp,hilos_totales,activos,uso,n_iter,t_iter_s,cpu_real,S_iter,carga_ajena,openblas_omp,estado,veredicto,motivo
+E1,4,529257,granado-compute-14,4,4,4,6,4.000,3.920,4,69.795,3.919,1.372,0/36,no,OK,PASA,4 hilos activos para 4 nucleos
+E3,4,529258,granado-compute-14,4,4,4,6,1.000,1.850,4,103.173,1.848,0.928,0/36,no,OK,LENTA,mas lenta que con 1 hilo (1 hilos activos para 4 nucleos)
+E2,4,529259,granado-compute-14,4,4,4,6,1.000,1.850,4,103.945,1.851,0.921,0/36,no,OK,LENTA,mas lenta que con 1 hilo (1 hilos activos para 4 nucleos)
+E0,4,529260,granado-compute-14,4,4,4,6,4.000,3.910,4,69.083,3.918,1.386,0/36,no,OK,PASA,4 hilos activos para 4 nucleos
+E1,24,529261,granado-compute-14,24,24,24,26,24.000,23.470,4,129.644,23.502,0.739,0/72,no,OK,LENTA,mas lenta que con 1 hilo (24 hilos activos para 24 nucleos)
+E3,24,529262,granado-compute-14,24,24,24,26,1.000,2.930,3,216.188,2.934,0.443,0/72,no,FALLA_limite_de_tiempo_(3_iteraciones_SCF),NO PASA,limite de tiempo (3 iteraciones SCF)

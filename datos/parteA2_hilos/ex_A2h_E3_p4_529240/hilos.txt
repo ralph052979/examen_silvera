@@ -1,0 +1,9 @@
+hilos_muestras=0
+hilos_totales=0
+nucleos_fisicos_hilos=0
+hilos_intervalos=0
+hilos_activos_mediana=0
+hilos_activos_max=0
+uso_cpu_mediana=0.00
+uso_cpu_max=0.00
+sobresuscripcion=0

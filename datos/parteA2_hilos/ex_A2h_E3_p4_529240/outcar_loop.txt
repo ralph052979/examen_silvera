@@ -1,0 +1,2 @@
+ running    1 mpi-ranks, with    4 threads/rank
+|               ----> ADVICE to this user running VASP <----                  |

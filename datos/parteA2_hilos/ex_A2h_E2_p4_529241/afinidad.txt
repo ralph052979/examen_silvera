@@ -1,0 +1,6 @@
+tarea 0 mascara 0x3000000003 cpus_logicos 0 1 36 37 nucleos_fisicos=2
+afinidad_ok=0
+procesos_con_mascara=1
+nucleos_fisicos_distintos=2
+nucleos_compartidos=0
+nucleos_por_socket=s0:2
