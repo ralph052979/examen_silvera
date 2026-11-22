@@ -30,31 +30,39 @@ con una energía de corte no muy grande y una malla de k-points pequeña.
 ### Calibración de la malla de k-points
 
 El enunciado exige que el caso base tarde **entre 15 min y 1 h en 1 núcleo**. Con 23 átomos y
-~8 800 ondas planas por k-point, un SCF con la malla mínima (3×3×1, 3 k-points) dura solo unos
-minutos. Por eso se calibra **solo la malla** (todo lo demás queda fijo) con siete candidatos que
-corren a la vez, cada uno en 1 núcleo físico:
+~8 800 ondas planas por k-point, un SCF con la malla pequeña que sugirió el docente (3×3×1) dura solo
+unos minutos. Por eso se calibró **solo la malla** (todo lo demás fijo) con siete candidatos en
+1 núcleo físico cada uno (2026-11-21, `granado-compute-14`):
 
-| Candidato | Malla Γ (supercelda) | Equivale en la primitiva | k-points irreducibles | t₁ estimado (min) |
-|---|---|---|---|---|
-| K1 | 3×3×1 | 6×6×1 | 3 | ~4 |
-| K2 | 4×4×2 | 8×8×2 | 8 | ~11 |
-| K3 | 6×6×2 | 12×12×2 | 14 | ~18 |
-| K4 | 6×6×3 | 12×12×3 (densidad convergida en la tesis) | 17 | ~22 |
-| K5 | 8×8×2 | 16×16×2 | 20 | ~26 |
-| K6 | 8×8×3 | 16×16×3 | 25 | ~33 |
-| K7 | 10×10×3 | 20×20×3 | 36 | ~47 |
+| Candidato | Malla Γ (supercelda) | Equivale en la primitiva | k-points irreducibles | t₁ estimado (min) | t₁ medido (min) |
+|---|---|---|---|---|---|
+| K1 | 3×3×1 | 6×6×1 | 3 | ~4 | 3.3 |
+| K2 | 4×4×2 | 8×8×2 | 8 | ~11 | 8.4 |
+| K3 | 6×6×2 | 12×12×2 | 14 | ~18 | 14.2 |
+| K4 | 6×6×3 | 12×12×3 (densidad convergida en la tesis) | 17 | ~22 | 17.1 |
+| K5 | 8×8×2 | 16×16×2 | 20 | ~26 | 19.9 |
+| K6 | 8×8×3 | 16×16×3 | 25 | ~33 | 24.0 |
+| **K7** | **10×10×3** | 20×20×3 | **36** | ~47 | **32.4** |
 
-Los k-points irreducibles se calcularon con la simetría del POSCAR (C₃ᵥ más inversión temporal) y
-VASP debe reportar los mismos; `analisis/resumen_t0.py` lo verifica. Los tiempos son una estimación
-a partir de la calibración real del intento anterior (monocapa 3×3: 45–88 s por iteración con
-4 k-points y ~43 000 ondas planas) y **pueden variar un factor 2** según la carga del nodo.
+**Regla de elección (fijada antes de ver los datos):** entre los candidatos que convergen con
+15 ≤ t₁ ≤ 60 min, el más cercano a **30 min** (centro de la ventana en escala logarítmica), para tener
+margen de un factor 2 hacia ambos lados (variabilidad medida en Granado entre corridas idénticas:
+20 vs 41 min).
 
-**Regla de elección:** entre los candidatos que convergen con 15 ≤ t₁ ≤ 60 min, el más cercano a
-**30 min** (centro de la ventana en escala logarítmica). Así queda un margen de un factor 2 hacia ambos
-lados, que es la variabilidad que se midió en Granado entre corridas idénticas (20 vs 41 min).
+**Resultado: caso base K7** (`entradas/caso_base/`), t₁ = 32.4 min, 18 iteraciones SCF, 913 MB
+estimados por VASP y 937 MB medidos. Tabla completa en `datos/tarea0_tabla_caso_base.md`.
 
-Los candidatos también sirven para la **Tarea C.2**: dan el tiempo y la energía total en función de la
-malla de k-points.
+Observaciones:
+- VASP usó en las 7 mallas exactamente los k-points irreducibles calculados con la simetría del
+  POSCAR (C₃ᵥ más inversión temporal).
+- Todas convergen en 18 iteraciones y el costo es proporcional a los k-points: ~2.9 s por k-point
+  por iteración, más ~1 s fijo. Las estimaciones previas fueron ~25 % más altas porque suponían
+  25 iteraciones.
+- Los 36 k-points de K7 se reparten exactamente con KPAR = 1, 2, 3, 4, 6 y 12 en 24 núcleos, lo
+  que permite estudiar KPAR en la Parte B (con 17 o 25 k-points no habría reparto parejo).
+- K1–K5 corrieron los cinco a la vez en el mismo nodo; K7 corrió su último tramo solo y salió ~10 %
+  más rápido por k-point: indicio de competencia por ancho de banda de memoria entre jobs.
+- Los candidatos también sirven para la **Tarea C.2** (tiempo y energía en función de la malla).
 
 ---
 
@@ -73,10 +81,16 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
 4. **`/usr/bin/time` no existe en los nodos.** El tiempo de pared se mide con `date +%s.%N` alrededor
    de `srun`; también se guardan el `Elapsed time` del OUTCAR y el `Elapsed` de `sacct`.
 5. **Memoria.** Sin `--mem`, Slurm pide la memoria de todo el nodo y el job queda bloqueado por
-   `QOSMaxMemoryPerJob`. Se pide `--mem=4G` (el caso usa menos de 2 GB).
+   `QOSMaxMemoryPerJob`. Se pide siempre de forma explícita: 4 GB en la Tarea 0 y 4 + p/2 GB en la A.1.
 6. **Nodo `granado-compute-18`.** El 2026-11-18 mataba los jobs en 1–2 s; se excluye.
 7. **Carga del socket.** Los jobs de otros usuarios en el mismo socket pueden duplicar el tiempo.
-   Cada corrida registra cuántos CPUs del socket estaban ocupados (`carga.txt`).
+   Cada corrida registra cada minuto cuántos CPUs de cada socket están ocupados (`carga.txt`) y
+   resume la carga ajena en los sockets del job (`carga_ajena_max` en `tiempo.txt`).
+8. **Máximo 5 jobs corriendo por usuario** (`QOSMaxJobsPerUserLimit`, visto el 2026-11-21). Los
+   demás esperan en cola aunque haya núcleos libres.
+9. **Afinidad.** Cada corrida verifica, con las máscaras de `srun --cpu-bind=verbose` y la topología
+   de `/sys`, que cada proceso tenga exactamente `--cpus-per-task` núcleos **físicos** y que ningún
+   núcleo físico se comparta (`afinidad.txt`). Si no se cumple, la corrida se marca como fallida.
 
 ---
 
@@ -101,8 +115,12 @@ examen_silvera/
     estado.sh                       estado de los jobs
     nuevo_candidato.sh              agrega y envia otra malla (solo si el resumen lo pide)
     consumo.sh                      horas-nucleo consumidas (sacct)
+    parteA1_preparar.sh             Tarea A.1: verifica el caso base y guarda los scripts en Git
+    parteA1_enviar.sh               Tarea A.1: envia las 21 corridas en una cadena (o --faltantes)
+    parteA1_estado.sh               Tarea A.1: estado de las corridas
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
+    parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I
   reporte/                          fuentes .tex y PDF
@@ -110,8 +128,8 @@ examen_silvera/
 ```
 
 Cada carpeta `corridas/<job>_<id>/` guarda las entradas y sus md5 (`entradas.md5`), `entorno.txt`
-(nodo, commit), `modulos.txt`, `ldd.txt`, `variables.txt`, `slurm_job.txt`, la afinidad (`vasp.err`),
-`carga.txt`, `tiempo.txt` y las salidas de VASP.
+(nodo, procesador, commit), `modulos.txt`, `ldd.txt`, `variables.txt`, `slurm_job.txt`, la afinidad
+(`vasp.err` y `afinidad.txt`), `carga.txt`, `tiempo.txt` y las salidas de VASP.
 
 ---
 
@@ -135,7 +153,39 @@ La tabla de la Tarea 0 queda en `datos/tarea0_tabla_caso_base.md` y la calibraci
 
 ---
 
-## 5. Historial
+## 5. Parte A.1: escalamiento fuerte con MPI
+
+| Decisión | Valor | Justificación |
+|---|---|---|
+| Caso | `entradas/caso_base/` (K7), el mismo INCAR, KPOINTS y POSCAR en todas las corridas | Solo cambia p |
+| Procesos | p = 1, 2, 4, 8, 12, 16, 24 procesos MPI, 1 hilo cada uno, un núcleo físico por proceso (`--hint=nomultithread`) | Memoria distribuida pura |
+| Parámetros de VASP | `NCORE = 1`, `KPAR = 1` (valores por defecto): VASP reparte las 144 bandas entre los p procesos (NPAR = p) | NCORE y KPAR se exploran en la Parte B; aquí se mide el efecto de p |
+| Repeticiones | 3 por cada p (21 corridas) | Media y desviación estándar, como pide el enunciado |
+| Ejecución | **Una sola cadena** (`--dependency=afterany`): nunca corren dos corridas propias a la vez | En la Tarea 0 se vio que los jobs propios en el mismo nodo se frenan entre sí (~10 %) |
+| Orden | r1: 1→24; r2: 24→1; r3: 8, 1, 16, 4, 24, 2, 12 | Que la carga del clúster a distintas horas no se confunda con el efecto de p |
+| Tiempo medido | Tiempo de pared de `srun` (`date` antes y después); también se guardan el `Elapsed` de VASP y el tiempo por iteración | El enunciado pide el tiempo de pared |
+| Verificaciones | Afinidad por núcleo físico, mismo número de iteraciones, k-points y bandas en todas las corridas, carga ajena, corridas atípicas (> 15 % de la mediana) | Rúbrica: diseño experimental y corrección técnica |
+| Memoria pedida | 4 + p/2 GB | En 1 proceso el caso usa 0.94 GB; cada proceso extra agrega ~0.3 GB |
+| Límite de tiempo | 1:40 h (p = 1), 1 h (2), 40 min (4), 30 min (8), 20 min (12–24) | Unas 3 veces el tiempo esperado |
+
+Las energías de todas las corridas quedan en `datos/parteA1_corridas.csv` con todos los dígitos que
+imprime VASP: las de p = 1, 4, 16 y 24 sirven para la **Tarea C.1** sin correr nada más.
+
+```bash
+bash slurm/parteA1_preparar.sh            # verifica y guarda los scripts en Git
+bash slurm/parteA1_enviar.sh              # envia la cadena de 21 corridas
+bash slurm/parteA1_estado.sh              # seguimiento
+python3 analisis/parteA1_resumen.py       # t(p) media +/- desviacion, S(p), E(p)
+python3 analisis/parteA1_resumen.py --guardar   # evidencia a datos/ y commit
+bash slurm/parteA1_enviar.sh --faltantes  # solo si alguna corrida fallo o se excluyo
+```
+
+Para excluir una corrida contaminada (por ejemplo, con carga ajena alta y tiempo atípico) se agrega
+una línea `JOBID motivo` a `datos/parteA1_excluidas.txt`; `--faltantes` la repite.
+
+---
+
+## 6. Historial
 
 El primer caso base (monocapa 3×3 con V_Se, ENCUT = 500 eV, calibrado el 2026-11-17) y las pruebas
 del entorno de Granado quedaron en la carpeta `examen_silvera_monocapa/`, con su propio historial de

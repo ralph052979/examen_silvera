@@ -8,8 +8,9 @@
 #  vasp_job.sh - ejecuta UN calculo VASP en su propia carpeta
 #                corridas/<nombre_del_job>_<jobid>/
 #
-#  No se envia a mano: lo envia slurm/enviar.sh, que fija --job-name,
-#  --ntasks, --cpus-per-task, --mem, --time y la variable CASO.
+#  No se envia a mano: lo envian slurm/enviar.sh (Tarea 0) y
+#  slurm/parteA1_enviar.sh (Parte A.1), que fijan --job-name, --ntasks,
+#  --cpus-per-task, --mem, --time y la variable CASO.
 #
 #  Variables de entrada (sbatch --export=ALL,...):
 #    CASO      K1..K7     -> entradas/candidatos/<CASO>/  (INCAR KPOINTS POSCAR)
@@ -24,11 +25,19 @@
 #    * tiempo con date         : /usr/bin/time no existe en los nodos
 #    * NO fijar PMIX_MCA_gds   : rompe MPI_Init. Los avisos "PMIX ERROR: BAD-PARAM"
 #                                son inofensivos.
+#
+#  Verificaciones de cada corrida (quedan en tiempo.txt y afinidad.txt):
+#    * afinidad: cada proceso tiene exactamente --cpus-per-task nucleos FISICOS
+#      y ningun nucleo fisico se comparte entre procesos;
+#    * VASP termino normalmente y el SCF convergio;
+#    * carga ajena: CPUs ocupados por otros usuarios en los sockets del job.
 # =============================================================================
 
 set -u
 REPO="${SLURM_SUBMIT_DIR:?este script se envia con sbatch desde la carpeta del repositorio}"
 cd "$REPO" || exit 1
+SYSCPU="${SYSCPU:-/sys/devices/system/cpu}"    # solo se cambia en pruebas
+PROCSTAT="${PROCSTAT:-/proc/stat}"              # solo se cambia en pruebas
 
 terminar() {   # terminar <codigo> <estado>
     echo "estado=$2" >> "${RUN:-$REPO/logs}/tiempo.txt" 2>/dev/null
@@ -63,7 +72,9 @@ fi
 module purge
 module load vasp/6.3.0-gnu9-openmp
 export LD_LIBRARY_PATH="$REPO/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+NTASKS="${SLURM_NTASKS:-1}"
+CPT="${SLURM_CPUS_PER_TASK:-1}"
+export OMP_NUM_THREADS="$CPT"
 export OMP_PLACES=cores
 export OMP_PROC_BIND=close
 export OMP_STACKSIZE=512m
@@ -71,15 +82,17 @@ ulimit -s unlimited 2>/dev/null || echo "aviso: no se pudo fijar ulimit -s unlim
 
 cd "$RUN" || exit 1
 VASP_BIN="$(command -v vasp_std)" || terminar 2 "FALLA_vasp_std_no_encontrado"
+CPU_MODELO=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')
 
 {
     echo "caso=$CASO"
     echo "job_id=$SLURM_JOB_ID"
     echo "job_name=$SLURM_JOB_NAME"
     echo "nodo=$(hostname)"
+    echo "cpu=${CPU_MODELO:-?}"
     echo "particion=${SLURM_JOB_PARTITION:-?}"
-    echo "ntasks=${SLURM_NTASKS:-1}"
-    echo "cpus_per_task=${SLURM_CPUS_PER_TASK:-1}"
+    echo "ntasks=$NTASKS"
+    echo "cpus_per_task=$CPT"
     echo "omp_num_threads=$OMP_NUM_THREADS"
     echo "git_hash=${GIT_HASH:-desconocido}"
     echo "vasp_bin=$VASP_BIN"
@@ -97,32 +110,30 @@ if grep -q "not found" ldd.txt; then
 fi
 
 # ------------------------------------------------------------- 3. carga del nodo
-# Mide cuantos CPUs logicos estan ocupados (>50 %) en el nodo y en el socket del job.
-# Sirve para saber si otros usuarios compiten por el mismo socket (ver README).
-PRIMER_CPU=$(grep -o "CPU_IDs=[0-9]*" slurm_job.txt | head -1 | cut -d= -f2)
-PKG=$(cat "/sys/devices/system/cpu/cpu${PRIMER_CPU:-0}/topology/physical_package_id" 2>/dev/null || echo 0)
-SOCKET_CPUS=""
-for d in /sys/devices/system/cpu/cpu[0-9]*; do
+# CPUs logicos ocupados (>50 %) en cada socket del nodo, medidos en 2 s.
+MAPA=""
+for d in "$SYSCPU"/cpu[0-9]*; do
     n="${d##*cpu}"
     p=$(cat "$d/topology/physical_package_id" 2>/dev/null || echo 0)
-    [ "$p" = "$PKG" ] && SOCKET_CPUS="$SOCKET_CPUS $n"
+    MAPA="$MAPA $n:$p"
 done
 carga() {
-    grep '^cpu[0-9]' /proc/stat > .stat1 2>/dev/null
+    grep '^cpu[0-9]' "$PROCSTAT" > .stat1 2>/dev/null
     sleep 2
-    grep '^cpu[0-9]' /proc/stat > .stat2 2>/dev/null
-    awk -v sock="$SOCKET_CPUS" -v etq="$1" -v f="$(date '+%H:%M:%S')" -v la="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" '
-        BEGIN { n = split(sock, s, " "); for (i = 1; i <= n; i++) en["cpu" s[i]] = 1 }
+    grep '^cpu[0-9]' "$PROCSTAT" > .stat2 2>/dev/null
+    awk -v mapa="$MAPA" -v etq="$1" -v f="$(date '+%H:%M:%S')" -v la="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" '
+        BEGIN { n = split(mapa, m, " "); mx = -1
+                for (i = 1; i <= n; i++) { split(m[i], a, ":"); pk["cpu" a[1]] = a[2]; tot[a[2]]++
+                                           if (a[2] + 0 > mx) mx = a[2] + 0 } }
         FNR == NR { t = 0; for (i = 2; i <= 9; i++) t += $i; T[$1] = t; I[$1] = $5 + $6; next }
         { t = 0; for (i = 2; i <= 9; i++) t += $i; dt = t - T[$1]; di = ($5 + $6) - I[$1]
-          if (dt > 0) { u = 1 - di / dt; tot++; if (u > 0.5) oc++
-                        if ($1 in en) { ts++; if (u > 0.5) os++ } } }
-        END { printf "%s %s cpus_ocupadas_nodo=%d/%d cpus_ocupadas_socket=%d/%d loadavg=%s\n",
-                     etq, f, oc, tot, os, ts, la }' .stat1 .stat2
+          if (dt > 0 && ($1 in pk)) { u = 1 - di / dt; if (u > 0.5) oc[pk[$1]]++ } }
+        END { s = ""; for (k = 0; k <= mx; k++) if (k in tot) s = s sprintf(" s%d=%d/%d", k, oc[k] + 0, tot[k])
+              printf "%s %s%s loadavg=%s\n", etq, f, s, la }' .stat1 .stat2
     rm -f .stat1 .stat2
 }
 carga inicio > carga.txt
-( while sleep 300; do carga durante >> carga.txt; done ) 2>/dev/null &
+( while sleep 60; do carga durante >> carga.txt; done ) 2>/dev/null &
 MONITOR=$!
 
 # ------------------------------------------------------------- 4. VASP
@@ -136,25 +147,87 @@ wait "$MONITOR" 2>/dev/null
 carga fin >> carga.txt
 WALL=$(awk -v a="$T0" -v b="$T1" 'BEGIN{printf "%.3f", b-a}')
 
-# ------------------------------------------------------------- 5. verificacion
-NTASKS="${SLURM_NTASKS:-1}"
-NMASK=$(grep -o "mask 0x[0-9a-fA-F]*" vasp.err 2>/dev/null | sort -u | wc -l)
+# ------------------------------------------------------------- 5. afinidad por nucleo fisico
+# srun --cpu-bind=verbose escribe en vasp.err una linea por proceso:
+#   cpu-bind=MASK - <nodo>, task  3  3 [12345]: mask 0x8000000008 set
+grep -E "task +[0-9]+ +[0-9]+ \[[0-9]+\]: mask 0x[0-9a-fA-F]+" vasp.err 2>/dev/null |
+awk -v syscpu="$SYSCPU" -v cpt="$CPT" -v nt="$NTASKS" '
+    function hex2cpus(h,    s, n, i, d, b, out) {
+        s = tolower(h); sub(/^0x/, "", s); n = length(s); out = ""
+        for (i = n; i >= 1; i--) {
+            d = index("0123456789abcdef", substr(s, i, 1)) - 1
+            for (b = 0; b < 4; b++) if (int(d / (2 ^ b)) % 2 == 1) out = out " " ((n - i) * 4 + b)
+        }
+        return out
+    }
+    function topo(c, campo,    f, v) {
+        f = syscpu "/cpu" c "/topology/" campo; v = "?"
+        if ((getline v < f) <= 0) v = "?"
+        close(f); return v
+    }
+    {
+        match($0, /task +[0-9]+/);  tk = substr($0, RSTART, RLENGTH); sub(/task +/, "", tk)
+        match($0, /mask 0x[0-9a-fA-F]+/); mk = substr($0, RSTART + 5, RLENGTH - 5)
+        if (tk in visto) next
+        visto[tk] = 1; ntk++
+        nc = split(hex2cpus(mk), cs, " ")
+        split("", propio); nn = 0; txt = ""
+        for (i = 1; i <= nc; i++) {
+            c = cs[i]; pk = topo(c, "physical_package_id"); key = pk ":" topo(c, "core_id")
+            txt = txt " " c
+            if (!(key in propio)) { propio[key] = 1; nn++ }
+            if (key in dueno) { if (dueno[key] != tk) compartido++ }
+            else { dueno[key] = tk; porsock[pk]++; total++ }
+        }
+        printf "tarea %s mascara %s cpus_logicos%s nucleos_fisicos=%d\n", tk, mk, txt, nn
+        if (nn != cpt) malcpt++
+    }
+    END {
+        ok = (ntk == nt && compartido == 0 && malcpt == 0 && total == nt * cpt) ? 1 : 0
+        s = ""
+        for (k = 0; k <= 64; k++) if (k in porsock) s = s (s == "" ? "" : ",") "s" k ":" porsock[k]
+        printf "afinidad_ok=%d\nprocesos_con_mascara=%d\nnucleos_fisicos_distintos=%d\nnucleos_compartidos=%d\nnucleos_por_socket=%s\n",
+               ok, ntk, total + 0, compartido + 0, s
+    }' > afinidad.txt
+AF_OK=$(grep '^afinidad_ok=' afinidad.txt | cut -d= -f2)
+SOCKS=$(grep '^nucleos_por_socket=' afinidad.txt | cut -d= -f2)
+
+# ------------------------------------------------------------- 6. carga ajena en los sockets del job
+# En las muestras "durante" se restan los hilos propios (ntasks x cpus-per-task).
+AJENA=$(awk -v socks="$SOCKS" -v propios=$((NTASKS * CPT)) '
+    BEGIN { n = split(socks, a, ","); for (i = 1; i <= n; i++) { split(a[i], b, ":"); js[b[1]] = 1 } }
+    { oc = 0; tt = 0
+      for (i = 3; i <= NF; i++) if ($i ~ /^s[0-9]+=/) {
+          split($i, x, "="); split(x[2], y, "/")
+          if (x[1] in js) { oc += y[1]; tt += y[2] } }
+      if ($1 == "durante") oc -= propios
+      if (oc < 0) oc = 0
+      if (oc > mx) mx = oc
+      suma += oc; nl++; T = tt }
+    END { printf "carga_ajena_max=%d/%d\ncarga_ajena_media=%.1f\n", mx, T, (nl ? suma / nl : 0) }' carga.txt)
+
+# ------------------------------------------------------------- 7. verificacion
 FIN=$(grep -c "General timing and accounting" OUTCAR 2>/dev/null); FIN=${FIN:-0}
 CONV=$(grep -c "aborting loop because EDIFF is reached" OUTCAR 2>/dev/null); CONV=${CONV:-0}
 NSCF=$(grep -c "LOOP:" OUTCAR 2>/dev/null); NSCF=${NSCF:-0}
+NMASK=$(grep -o "mask 0x[0-9a-fA-F]*" vasp.err 2>/dev/null | sort -u | wc -l)
 
 {
     echo "fecha_fin=$(date '+%Y-%m-%d %H:%M:%S')"
     echo "wall_s=$WALL"
     echo "rc_srun=$RC"
+    echo "ntasks=$NTASKS"
+    echo "cpus_per_task=$CPT"
     echo "mascaras_distintas=$NMASK"
+    grep -E '^(afinidad_ok|nucleos_fisicos_distintos|nucleos_compartidos|nucleos_por_socket)=' afinidad.txt
+    echo "$AJENA"
     echo "fin_normal_vasp=$FIN"
     echo "convergido=$CONV"
     echo "n_scf=$NSCF"
 } > tiempo.txt
 
 echo "---- afinidad (srun --cpu-bind=verbose) ----"
-grep "mask" vasp.err
+cat afinidad.txt
 echo "---- carga del nodo ----"
 cat carga.txt
 echo "---- tiempo ----"
@@ -163,6 +236,6 @@ cat tiempo.txt
 [ "$RC" -eq 0 ]            || { tail -20 vasp.out; tail -20 vasp.err; terminar 3 "FALLA_srun_rc_$RC"; }
 [ "$FIN" -ge 1 ]           || { tail -20 vasp.out; terminar 3 "FALLA_VASP_no_termino_normalmente"; }
 [ "$NSCF" -ge 1 ]          || terminar 3 "FALLA_sin_iteraciones_SCF"
-[ "$NMASK" -eq "$NTASKS" ] || terminar 4 "FALLA_afinidad_${NMASK}_mascaras_para_${NTASKS}_procesos"
+[ "${AF_OK:-0}" = "1" ]    || terminar 4 "FALLA_afinidad_(ver_afinidad.txt)"
 [ "$CONV" -ge 1 ]          || terminar 5 "FALLA_SCF_no_convergio"
 terminar 0 "OK"
