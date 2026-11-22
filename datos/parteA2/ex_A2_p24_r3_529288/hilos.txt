@@ -1,0 +1,9 @@
+hilos_muestras=64
+hilos_totales=26
+nucleos_fisicos_hilos=24
+hilos_intervalos=63
+hilos_activos_mediana=24
+hilos_activos_max=24
+uso_cpu_mediana=23.47
+uso_cpu_max=23.63
+sobresuscripcion=0

@@ -1,0 +1,6 @@
+tarea 0 mascara 0x3fffc0000 cpus_logicos 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 nucleos_fisicos=16
+afinidad_ok=1
+procesos_con_mascara=1
+nucleos_fisicos_distintos=16
+nucleos_compartidos=0
+nucleos_por_socket=s1:16

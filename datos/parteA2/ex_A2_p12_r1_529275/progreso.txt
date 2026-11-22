@@ -1,0 +1,4 @@
+iteracion 1 101
+iteracion 2 193
+iteracion 3 288
+iteracion 4 382

@@ -1,0 +1,9 @@
+inicio 15:09:43 s0=0/36 s1=0/36 loadavg=0.92 1.11 3.03
+durante 15:10:45 s0=9/36 s1=0/36 loadavg=4.72 2.13 3.26
+durante 15:11:47 s0=8/36 s1=0/36 loadavg=6.46 3.15 3.54
+durante 15:12:49 s0=8/36 s1=0/36 loadavg=7.51 4.11 3.85
+durante 15:13:51 s0=8/36 s1=0/36 loadavg=7.82 4.82 4.11
+durante 15:14:53 s0=8/36 s1=0/36 loadavg=7.61 5.32 4.33
+durante 15:15:55 s0=1/36 s1=0/36 loadavg=3.65 4.63 4.16
+durante 15:16:57 s0=12/36 s1=0/36 loadavg=5.85 4.93 4.28
+fin 15:17:05 s0=4/36 s1=0/36 loadavg=5.78 4.93 4.29

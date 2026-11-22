@@ -102,3 +102,4 @@
 529260                 ex_A2h_E0_p4  phys_fast          4   00:07:09       1716             COMPLETED 
 529261                ex_A2h_E1_p24  phys_fast         24   00:10:55      15720             COMPLETED 
 529262                ex_A2h_E3_p24  phys_fast         24   00:13:25      19320                FAILED 
+529271                  ex_A2_p1_r1  phys_fast          1   00:00:31         31               RUNNING 
