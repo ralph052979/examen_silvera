@@ -16,14 +16,16 @@
 #  Variables de entrada (sbatch --export=ALL,...):
 #    CASO         K1..K7     -> entradas/candidatos/<CASO>/  (INCAR KPOINTS POSCAR)
 #                 caso_base  -> entradas/caso_base/
+#                 otra ruta  -> entradas/<CASO>/  (por ejemplo debil/P4 de la Parte B)
 #    GIT_HASH     (opcional) commit del repositorio al momento de enviar
 #    PASO_NTASKS  (opcional) procesos del paso srun   (por defecto, los del job)
 #    PASO_CPT     (opcional) CPUs por proceso del paso (por defecto, las del job)
 #    PASO_TPC     (opcional) srun --threads-per-core=PASO_TPC
-#    PASO_MODO    (opcional) auto = 1 proceso con HILOS hilos, uno por nucleo fisico. Antes
-#                 de VASP se prueban, con un comando de 1 s, varias formas de pedir el paso
-#                 a srun (geometria_pasos.txt) y se usa la primera cuya mascara real tiene
-#                 HILOS nucleos fisicos (de preferencia, 1 hilo de hardware por nucleo).
+#    PASO_MODO    (opcional) auto = PASO_NTASKS procesos (1 si no se da) con HILOS hilos cada
+#                 uno, un nucleo fisico por hilo. Antes de VASP se prueban, con un comando de
+#                 1 s, varias formas de pedir el paso a srun (geometria_pasos.txt) y se usa la
+#                 primera cuya mascara real da HILOS nucleos fisicos a cada proceso, sin
+#                 compartir nucleos (de preferencia, 1 hilo de hardware por nucleo).
 #    HILOS        (opcional) hilos OpenMP por proceso  (por defecto PASO_CPT)
 #    BLAS_HILOS   (opcional) OPENBLAS_NUM_THREADS (1 = OpenBLAS sin hilos propios)
 #    ESPERA_OMP   (opcional) OMP_WAIT_POLICY (PASSIVE o ACTIVE; vacio = la de libgomp)
@@ -35,6 +37,9 @@
 #                 termino OK, o si alguno de REQUIERE_FALLA si termino OK.
 #    PILA_HILOS   (opcional) n = en la muestra n de hilos, foto de las pilas de todos
 #                 los hilos con gdb (pila_hilos.txt; solo diagnostico)
+#    MON_INTERVALO (opcional) s entre muestras de hilos y memoria (10 por defecto)
+#    SUFIJO       (opcional) se agrega al nombre de la carpeta de la corrida: varias
+#                 corridas dentro de un mismo job (serie de ENCUT de la C.2)
 #
 #  Configuracion de Granado verificada (ver README.md):
 #    * --hint=nomultithread    : 1 proceso por nucleo FISICO; AllocCPUS = ntasks
@@ -48,11 +53,12 @@
 #    * afinidad: cada proceso tiene exactamente HILOS nucleos FISICOS en su mascara
 #      y ningun nucleo fisico se comparte entre procesos (se mira al arrancar:
 #      si falla, la corrida se detiene en segundos);
-#    * hilos (si HILOS > 1): cada 10 s se lee /proc/<pid>/task/*/stat de los
-#      procesos de VASP (el pid lo escribe srun en vasp.err). Se mide en que
-#      nucleos fisicos estan los hilos y cuantos hilos estan ACTIVOS (>= 50 % de
-#      un CPU). Si hay mas hilos activos que nucleos (p. ej. un hilo propio de
-#      OpenBLAS), la corrida se marca como sobresuscrita;
+#    * hilos y memoria: cada MON_INTERVALO s se lee /proc/<pid>/task/*/stat y
+#      /proc/<pid>/status de cada proceso de VASP (el pid lo escribe srun en
+#      vasp.err). Se mide en que nucleos fisicos estan los hilos, cuantos hilos
+#      estan ACTIVOS (>= 50 % de un CPU) y la memoria maxima (VmHWM) de cada
+#      proceso. Con HILOS > 1, si hay mas hilos activos que nucleos (p. ej. un hilo
+#      propio de OpenBLAS), la corrida se marca como sobresuscrita;
 #    * VASP termino normalmente y el SCF convergio (salvo con NELM_DIAG);
 #    * carga ajena: CPUs ocupados por otros usuarios en los sockets del job.
 #  Si Slurm avisa que se acaba el tiempo (USR1, 90 s antes), se detiene VASP y se
@@ -65,7 +71,7 @@ cd "$REPO" || exit 1
 SYSCPU="${SYSCPU:-/sys/devices/system/cpu}"    # solo se cambia en pruebas
 PROCSTAT="${PROCSTAT:-/proc/stat}"              # solo se cambia en pruebas
 PROCPID="${PROCPID:-/proc}"                     # solo se cambia en pruebas
-MON_INTERVALO="${MON_INTERVALO:-10}"            # s entre muestras de hilos
+MON_INTERVALO="${MON_INTERVALO:-10}"            # s entre muestras de hilos y memoria
 MON_INICIO="${MON_INICIO:-5}"                   # s antes de la primera muestra
 
 terminar() {   # terminar <codigo> <estado>
@@ -77,17 +83,17 @@ terminar() {   # terminar <codigo> <estado>
 # ------------------------------------------------------------- 1. entradas
 CASO="${CASO:-}"
 [ -n "$CASO" ] || { echo "RESULTADO: FALLA_falta_la_variable_CASO"; exit 1; }
-if [ "$CASO" = "caso_base" ]; then
-    SRC="$REPO/entradas/caso_base"
-else
+if [ -d "$REPO/entradas/candidatos/$CASO" ]; then
     SRC="$REPO/entradas/candidatos/$CASO"
+else
+    SRC="$REPO/entradas/$CASO"
 fi
 for f in INCAR KPOINTS POSCAR; do
     [ -s "$SRC/$f" ] || { echo "RESULTADO: FALLA_no_existe_$f (en $SRC)"; exit 1; }
 done
 [ -s "$REPO/entradas/POTCAR" ] || { echo "RESULTADO: FALLA_no_existe_entradas/POTCAR"; exit 1; }
 
-RUN="$REPO/corridas/${SLURM_JOB_NAME}_${SLURM_JOB_ID}"
+RUN="$REPO/corridas/${SLURM_JOB_NAME}_${SLURM_JOB_ID}${SUFIJO:-}"
 mkdir -p "$RUN" || exit 1
 
 # Corridas condicionales: se decide con el estado de jobs anteriores de la misma cadena.
@@ -135,7 +141,7 @@ GEOM=""
 [ -n "${PASO_TPC:-}" ]    && GEOM="$GEOM --threads-per-core=$PASO_TPC"
 BIND="--cpu-bind=verbose,cores"
 if [ "${PASO_MODO:-}" = "auto" ]; then
-    NTASKS=1; CPT="$NHILOS"; GEOM=""      # el paso se decide con las pruebas de la seccion 5
+    NTASKS="${PASO_NTASKS:-1}"; CPT="$NHILOS"; GEOM=""   # el paso se decide con las pruebas (4b)
 fi
 # Solo este script decide los hilos: se borra lo que venga del entorno del login.
 unset OPENBLAS_NUM_THREADS GOTO_NUM_THREADS OMP_WAIT_POLICY GOMP_SPINCOUNT OMP_DYNAMIC \
@@ -256,23 +262,25 @@ afinidad() {
             if (tk in visto) next
             visto[tk] = 1; ntk++
             nc = split(hex2cpus(mk), cs, " ")
-            split("", propio); nn = 0; txt = ""
+            split("", propio); split("", sk); nn = 0; ns = 0; txt = ""
             for (i = 1; i <= nc; i++) {
                 c = cs[i]; pk = topo(c, "physical_package_id"); key = pk ":" topo(c, "core_id")
                 txt = txt " " c
+                if (!(pk in sk)) { sk[pk] = 1; ns++ }
                 if (!(key in propio)) { propio[key] = 1; nn++ }
                 if (key in dueno) { if (dueno[key] != tk) compartido++ }
                 else { dueno[key] = tk; porsock[pk]++; total++ }
             }
-            printf "tarea %s mascara %s cpus_logicos%s nucleos_fisicos=%d\n", tk, mk, txt, nn
+            printf "tarea %s mascara %s cpus_logicos%s nucleos_fisicos=%d sockets=%d\n", tk, mk, txt, nn, ns
             if (nn != cpt) malcpt++
+            if (ns > 1) dos++
         }
         END {
             ok = (ntk == nt && compartido == 0 && malcpt == 0 && total == nt * cpt) ? 1 : 0
             s = ""
             for (k = 0; k <= 64; k++) if (k in porsock) s = s (s == "" ? "" : ",") "s" k ":" porsock[k]
-            printf "afinidad_ok=%d\nprocesos_con_mascara=%d\nnucleos_fisicos_distintos=%d\nnucleos_compartidos=%d\nnucleos_por_socket=%s\n",
-                   ok, ntk, total + 0, compartido + 0, s
+            printf "afinidad_ok=%d\nprocesos_con_mascara=%d\nnucleos_fisicos_distintos=%d\nnucleos_compartidos=%d\nnucleos_por_socket=%s\nprocesos_en_2_sockets=%d\n",
+                   ok, ntk, total + 0, compartido + 0, s, dos + 0
         }'
 }
 pids_vasp() {   # pid de cada proceso de VASP, segun las lineas de srun en vasp.err
@@ -327,9 +335,10 @@ vigilante() {
     done
 }
 
-# Monitor de hilos: cada MON_INTERVALO s, una ronda con "proc <pid> <uptime> tid:cpu:estado:ticks ...".
+# Monitor de hilos y memoria: cada MON_INTERVALO s, una ronda con
+# "proc <pid> <uptime> <VmHWM kB> tid:cpu:estado:ticks ..." por cada proceso de VASP.
 monitor_hilos() {
-    local pids="" i=0 ronda=0 vivos pid lin
+    local pids="" i=0 ronda=0 vivos pid lin hwm
     while [ -z "$pids" ] && [ "$i" -lt 120 ]; do
         sleep 1; i=$((i + 1))
         pids=$(pids_vasp)
@@ -347,7 +356,8 @@ monitor_hilos() {
             lin=$(cat "$PROCPID/$pid"/task/*/stat 2>/dev/null | awk '{
                     s = $0; sub(/^[^)]*\) /, "", s); n = split(s, f, " ")
                     if (n >= 37) printf " %s:%s:%s:%d", $1, f[37], f[1], f[12] + f[13] }')
-            echo "proc $pid $(cut -d' ' -f1 /proc/uptime)$lin"
+            hwm=$(awk '/^VmHWM:/ {print $2; exit}' "$PROCPID/$pid/status" 2>/dev/null)
+            echo "proc $pid $(cut -d' ' -f1 /proc/uptime) ${hwm:-0}$lin"
         done
         [ "$vivos" = 1 ] || break
         if [ "$ronda" -eq "${PILA_HILOS:-0}" ]; then
@@ -369,55 +379,68 @@ monitor_hilos() {
 # En Granado (CR_CPU_MEMORY) un paso "srun -n 1 -c p" toma los 2 hilos de hardware de p/2
 # nucleos. Se prueban otras formas con un comando de 1 s y se elige por la mascara REAL
 # (Cpus_allowed_list del proceso), no por lo que diga la opcion.
-cpus_de_lista() {   # "0-3,36-39" -> "0 1 2 3 36 37 38 39"
-    echo "$1" | tr ',' '\n' | awk -F- 'NF == 1 && $1 != "" {print $1} NF == 2 {for (i = $1; i <= $2; i++) print i}' | tr '\n' ' '
-}
-nucleos_de() {      # lista de CPUs -> numero de nucleos fisicos distintos
-    local c k vis=" " n=0
-    for c in $1; do
-        k="$(cat "$SYSCPU/cpu$c/topology/physical_package_id" 2>/dev/null):$(cat "$SYSCPU/cpu$c/topology/core_id" 2>/dev/null)"
-        case "$vis" in *" $k "*) ;; *) vis="$vis$k "; n=$((n + 1)) ;; esac
-    done
-    echo "$n"
-}
 probar_paso() {     # probar_paso <nombre> <opciones de srun>: una linea en geometria_pasos.txt
     local nom="$1"; shift
-    local out rc lista cpus nl nn vb
+    local out rc res vb
     out=$(timeout 30 srun --mpi=pmix "$@" grep -E '^Cpus_allowed_list' /proc/self/status < /dev/null 2> ".paso_$nom.err")
     rc=$?
-    lista=$(echo "$out" | awk '/Cpus_allowed_list/ {print $2; exit}')
-    cpus=$(cpus_de_lista "$lista")
-    nl=$(echo $cpus | wc -w)
-    nn=$(nucleos_de "$cpus")
     vb=$(grep -cE "task +[0-9]+ +[0-9]+ \[[0-9]+\]: mask 0x" ".paso_$nom.err" 2>/dev/null)
-    echo "$nom rc=$rc cpus=${lista:-ninguno} logicos=$nl nucleos=$nn linea_mask=${vb:-0} opciones=$*" >> geometria_pasos.txt
-    grep -v '^ *$' ".paso_$nom.err" 2>/dev/null | head -5 | sed 's/^/    /' >> geometria_pasos.txt
+    # Una linea Cpus_allowed_list por proceso: CPUs logicos y nucleos fisicos de cada uno, y
+    # nucleos que aparecen en mas de un proceso.
+    res=$(echo "$out" | awk -v syscpu="$SYSCPU" '
+        function topo(c, campo,    f, v) {
+            f = syscpu "/cpu" c "/topology/" campo; v = "?"
+            if ((getline v < f) <= 0) v = "?"
+            close(f); return v
+        }
+        /Cpus_allowed_list/ {
+            nt++; n = split($2, r, ","); split("", vis); nl = 0; nn = 0
+            for (i = 1; i <= n; i++) {
+                m = split(r[i], ab, "-"); a = ab[1] + 0; b = (m == 2 ? ab[2] + 0 : a)
+                for (c = a; c <= b; c++) {
+                    nl++; k = topo(c, "physical_package_id") ":" topo(c, "core_id")
+                    if (!(k in vis)) { vis[k] = 1; nn++; if (k in todos) comp++; todos[k] = 1 }
+                }
+            }
+            if (nt == 1 || nn < nmin) nmin = nn
+            if (nn > nmax) nmax = nn
+            if (nl > lmax) lmax = nl
+            if (nt == 1) primera = $2
+        }
+        END {
+            u = 0; for (k in todos) u++
+            printf "tareas=%d nucleos_min=%d nucleos_max=%d logicos_max=%d union=%d compartidos=%d cpus_tarea0=%s",
+                   nt + 0, nmin + 0, nmax + 0, lmax + 0, u, comp + 0, (primera == "" ? "ninguno" : primera)
+        }')
+    echo "$nom rc=$rc $res linea_mask=${vb:-0} opciones=$*" >> geometria_pasos.txt
+    grep -v '^ *$' ".paso_$nom.err" 2>/dev/null | grep -v "PMIX ERROR" | head -4 | sed 's/^/    /' >> geometria_pasos.txt
     rm -f ".paso_$nom.err"
 }
 PASO_VARIANTE="fijo"
 if [ "${PASO_MODO:-}" = "auto" ]; then
     : > geometria_pasos.txt
-    probar_paso hint  --ntasks=1 --cpus-per-task="$NHILOS" --hint=nomultithread --cpu-bind=verbose
-    probar_paso tpc   --ntasks=1 --cpus-per-task="$NHILOS" --threads-per-core=1 --cpu-bind=verbose,cores
-    probar_paso base  --ntasks=1 --cpus-per-task="$NHILOS" --cpu-bind=verbose,cores
-    probar_paso doble --ntasks=1 --cpus-per-task=$((2 * NHILOS)) --cpu-bind=verbose,cores
-    # La primera que funciona con 1 hilo de hardware por nucleo; si ninguna, la primera con
-    # HILOS nucleos aunque use los 2 hilos de cada uno (OMP_PLACES=cores pone 1 hilo por nucleo).
-    PASO_VARIANTE=$(awk -v p="$NHILOS" '
-        /^[a-z]+ rc=/ { ok = 1; lg = nu = vb = -1
-            for (i = 2; i <= NF; i++) { split($i, a, "=")
-                if (a[1] == "rc" && a[2] != "0") ok = 0
-                if (a[1] == "logicos") lg = a[2]; if (a[1] == "nucleos") nu = a[2]; if (a[1] == "linea_mask") vb = a[2] }
-            if (ok && vb >= 1 && nu == p) { if (lg == p && uno == "") uno = $1; if (cual == "") cual = $1 } }
+    probar_paso hint  --ntasks="$NTASKS" --cpus-per-task="$NHILOS" --hint=nomultithread --cpu-bind=verbose
+    probar_paso tpc   --ntasks="$NTASKS" --cpus-per-task="$NHILOS" --threads-per-core=1 --cpu-bind=verbose,cores
+    probar_paso base  --ntasks="$NTASKS" --cpus-per-task="$NHILOS" --cpu-bind=verbose,cores
+    probar_paso doble --ntasks="$NTASKS" --cpus-per-task=$((2 * NHILOS)) --cpu-bind=verbose,cores
+    # La primera en la que cada proceso tiene HILOS nucleos fisicos propios con 1 hilo de hardware
+    # por nucleo; si ninguna, la primera con HILOS nucleos por proceso aunque use los 2 hilos de
+    # cada uno (OMP_PLACES=cores pone 1 hilo de OpenMP por nucleo).
+    PASO_VARIANTE=$(awk -v p="$NHILOS" -v n="$NTASKS" '
+        /^[a-z]+ rc=/ { split("", v)
+            for (i = 2; i <= NF; i++) { k = index($i, "="); if (k) v[substr($i, 1, k - 1)] = substr($i, k + 1) }
+            ok = (v["rc"] == "0" && v["tareas"] + 0 == n && v["linea_mask"] + 0 >= n && v["nucleos_min"] + 0 == p &&
+                  v["nucleos_max"] + 0 == p && v["union"] + 0 == n * p && v["compartidos"] + 0 == 0)
+            if (ok) { if (v["logicos_max"] + 0 == p && uno == "") uno = $1; if (cual == "") cual = $1 } }
         END { print (uno != "" ? uno : (cual != "" ? cual : "ninguna")) }' geometria_pasos.txt)
     case "$PASO_VARIANTE" in
-        hint)  GEOM="--ntasks=1 --cpus-per-task=$NHILOS --hint=nomultithread"; BIND="--cpu-bind=verbose" ;;
-        tpc)   GEOM="--ntasks=1 --cpus-per-task=$NHILOS --threads-per-core=1" ;;
-        base)  GEOM="--ntasks=1 --cpus-per-task=$NHILOS" ;;
-        doble) GEOM="--ntasks=1 --cpus-per-task=$((2 * NHILOS))" ;;
+        hint)  GEOM="--ntasks=$NTASKS --cpus-per-task=$NHILOS --hint=nomultithread"; BIND="--cpu-bind=verbose" ;;
+        tpc)   GEOM="--ntasks=$NTASKS --cpus-per-task=$NHILOS --threads-per-core=1" ;;
+        base)  GEOM="--ntasks=$NTASKS --cpus-per-task=$NHILOS" ;;
+        doble) GEOM="--ntasks=$NTASKS --cpus-per-task=$((2 * NHILOS))" ;;
         *)     cat geometria_pasos.txt
                kill "$MONITOR" 2>/dev/null
-               terminar 4 "FALLA_geometria_(ningun_paso_de_srun_dio_${NHILOS}_nucleos_fisicos,_ver_geometria_pasos.txt)" ;;
+               terminar 4 "FALLA_geometria_(ningun_paso_de_srun_dio_${NHILOS}_nucleos_fisicos_por_proceso,_ver_geometria_pasos.txt)" ;;
     esac
     echo "paso_variante=$PASO_VARIANTE" >> entorno.txt
     echo "---- pruebas del paso de srun (elegida: $PASO_VARIANTE) ----"
@@ -435,11 +458,8 @@ SRUN_PID=$!
 trap 'detener limite_de_tiempo' USR1
 vigilante &
 VIG=$!
-MONH=""
-if [ "$NHILOS" -gt 1 ]; then
-    monitor_hilos >> hilos_crudo.txt 2>/dev/null &
-    MONH=$!
-fi
+monitor_hilos >> hilos_crudo.txt 2>/dev/null &     # hilos y memoria (VmHWM) de cada proceso
+MONH=$!
 RC=0
 while :; do
     wait "$SRUN_PID"
@@ -492,9 +512,10 @@ awk -v syscpu="$SYSCPU" -v hz="$(getconf CLK_TCK 2>/dev/null || echo 100)" -v li
     $1 == "ronda" { cerrar(); abierta = 1; ns++; nh = 0; nuc = 0; act = 0; uso = 0; npr = 0; completa = 1; split("", vis); next }
     $1 == "proc" && abierta {
         pid = $2; t = $3 + 0; npr++
+        if ($4 + 0 > hwm[pid]) hwm[pid] = $4 + 0
         valido = (pid in tprev) && (t > tprev[pid]); dt = t - tprev[pid]
         if (!valido) completa = 0
-        for (i = 4; i <= NF; i++) {
+        for (i = 5; i <= NF; i++) {
             split($i, a, ":"); nh++
             key = topo(a[2], "physical_package_id") ":" topo(a[2], "core_id")
             if (!(key in vis)) { vis[key] = 1; nuc++ }
@@ -514,6 +535,9 @@ awk -v syscpu="$SYSCPU" -v hz="$(getconf CLK_TCK 2>/dev/null || echo 100)" -v li
         printf "hilos_muestras=%d\nhilos_totales=%d\nnucleos_fisicos_hilos=%d\n", ns, mh, mx
         printf "hilos_intervalos=%d\nhilos_activos_mediana=%g\nhilos_activos_max=%d\n", ni, am, amax
         printf "uso_cpu_mediana=%.2f\nuso_cpu_max=%.2f\nsobresuscripcion=%d\n", um, umax, sob
+        mp = 0; mt = 0; np = 0
+        for (q in hwm) { np++; mt += hwm[q]; if (hwm[q] > mp) mp = hwm[q] }
+        printf "mem_procesos_medidos=%d\nmem_proceso_max_mb=%.0f\nmem_total_mb=%.0f\n", np, mp / 1024, mt / 1024
     }' hilos_crudo.txt > hilos.txt
 HMUES=$(grep '^hilos_muestras=' hilos.txt | cut -d= -f2)
 HNUC=$(grep '^nucleos_fisicos_hilos=' hilos.txt | cut -d= -f2)
@@ -554,7 +578,7 @@ NMASK=$(grep -o "mask 0x[0-9a-fA-F]*" vasp.err 2>/dev/null | sort -u | wc -l)
     echo "hilos=$NHILOS"
     echo "alloc_cpus=${ALLOC:-?}"
     echo "mascaras_distintas=$NMASK"
-    grep -E '^(afinidad_ok|nucleos_fisicos_distintos|nucleos_compartidos|nucleos_por_socket)=' afinidad.txt
+    grep -E '^(afinidad_ok|nucleos_fisicos_distintos|nucleos_compartidos|nucleos_por_socket|procesos_en_2_sockets)=' afinidad.txt
     cat hilos.txt
     echo "$AJENA"
     echo "fin_normal_vasp=$FIN"

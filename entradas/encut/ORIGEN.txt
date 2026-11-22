@@ -1,0 +1,3 @@
+Serie de ENCUT (Tarea C.2): caso base con la malla Gamma 3x3x1 (3 k-points irreducibles), 1 nucleo.
+Generado por slurm/parteBC_preparar.sh a partir de entradas/caso_base/. Referencia: ENCUT = 800 eV.
+encut_eV: 250 300 350 400 450 500 550 600 700 800

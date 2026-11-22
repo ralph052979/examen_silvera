@@ -135,6 +135,8 @@ examen_silvera/
     candidatos.txt                  mallas de k-points de la calibracion
     candidatos/K1..K7/              INCAR, KPOINTS y POSCAR de cada candidato
     caso_base/                      caso elegido (lo crea analisis/resumen_t0.py --fijar)
+    debil/P1..P24/                  Parte B.1: KPAR = p y 3p k-points (lo crea slurm/parteBC_preparar.sh)
+    encut/E250..E800/               Tarea C.2: ENCUT = 250...800 eV con la malla 3x3x1 (idem)
     POTCAR.titel, POTCAR.sha256     identidad del POTCAR (el POTCAR no va a Git)
   slurm/
     preparar.sh                     prepara entradas, librerias y Git (login, sin VASP)
@@ -151,22 +153,30 @@ examen_silvera/
     parteA2_hilos.sh                Tarea A.2, ronda 2: hilos de OpenBLAS y espera de OpenMP
     parteA2_enviar.sh               Tarea A.2: barrido OpenMP con carga fija (4 iteraciones), en una cadena
     parteA2_estado.sh               Tarea A.2: estado de las dos rondas y del barrido
+    parteBC_preparar.sh             Partes B y C.2: genera entradas/debil/ y entradas/encut/, verifica y guarda en Git
+    parteB_enviar.sh                Parte B: B.1 (21 corridas) y B.2 (19) en una cadena (o --faltantes)
+    parteC_enviar.sh                Tarea C.2: 3 series de ENCUT, un job de 1 nucleo por serie (o --faltantes)
+    parteC2_serie.sh                Tarea C.2: job que corre vasp_job.sh una vez por cada ENCUT de la serie
+    parteBC_estado.sh               Partes B y C.2: estado de las corridas
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
     parteA2_diagnostico.py          Tarea A.2, ronda 1: mascaras (tambien de las cortadas) y tiempos
     parteA2_hilos.py                Tarea A.2, ronda 2: hilos activos, tiempos por iteracion y conclusion
     parteA2_resumen.py              Tarea A.2: t(p), S(p), E(p) y comparacion por iteracion con MPI (A.1)
+    parteA3_graficas.py             Tarea A.3: figuras S(p) y E(p), ajustes de Amdahl y de Karp-Flatt
+    parteB_resumen.py               Parte B: Ew(p) del escalamiento debil; t, S, E y memoria del hibrido
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I
-  reporte/                          fuentes .tex y PDF
+  reporte/                          fuentes .tex y PDF; figuras/ (las generan los scripts de analisis/)
   (fuera de Git: POTCAR, lib/, corridas/, logs/)
 ```
 
 Cada carpeta `corridas/<job>_<id>/` guarda las entradas y sus md5 (`entradas.md5`), `entorno.txt`
 (nodo, procesador, commit, entorno de hilos, OpenBLAS), `modulos.txt`, `ldd.txt`, `variables.txt`,
 `slurm_job.txt`, `topologia.txt`, la afinidad (`vasp.err` y `afinidad.txt`), los hilos (`hilos_crudo.txt`
-y `hilos.txt`), `progreso.txt`, `carga.txt`, `tiempo.txt` y las salidas de VASP.
+y `hilos.txt`, que desde la Parte B incluye la memoria maxima VmHWM de cada proceso), `progreso.txt`,
+`carga.txt`, `tiempo.txt` y las salidas de VASP.
 
 ---
 
@@ -284,7 +294,68 @@ python3 analisis/parteA2_resumen.py --guardar
 
 ---
 
-## 7. Historial
+## 7. Tarea A.3: gráficas y ajustes
+
+`analisis/parteA3_graficas.py` lee las tablas de la A.1 y la A.2 y hace:
+
+* `reporte/figuras/A3_escalamiento.pdf` (y `.png`): S(p) y E(p) de MPI y OpenMP con el tiempo de la
+  corrida, la curva ideal, la ley de Amdahl ajustada (línea continua) y el modelo con sobrecosto
+  (punteada).
+* `reporte/figuras/A3_por_iteracion.pdf`: S(p) por iteración SCF de ambos modos y la fracción serial
+  de Karp-Flatt e(p) = (1/S − 1/p)/(1 − 1/p) de cada punto.
+* `datos/parteA3_ajustes.md` y `.csv`, `datos/parteA3_karp_flatt.csv`.
+
+Modelos: Amdahl, 1/S = f + (1 − f)/p; con sobrecosto, 1/S = f + (1 − f)/p + c(p − 1). Los dos son
+lineales en sus parámetros sobre y = 1/S − 1/p, y se ajustan por mínimos cuadrados ponderados con la
+incertidumbre de S (p > 1). Si e(p) crece con p, el límite no es una fracción serial fija sino un
+sobrecosto que crece con p (comunicación, sincronización, ancho de banda de memoria).
+
+```bash
+python3 analisis/parteA3_graficas.py --guardar   # necesita matplotlib (python3 -m pip install --user matplotlib)
+```
+
+---
+
+## 8. Parte B: escalamiento débil e híbrido
+
+| Decisión | B.1 (escalamiento débil) | B.2 (híbrido MPI × OpenMP) |
+|---|---|---|
+| Caso | `entradas/debil/P<p>/`: caso base con `KPAR = p` y una malla Gamma con 3p k-points irreducibles (3×3×1, 3×3×2, 5×5×3, 6×6×4, 10×10×3, 14×14×2, 10×10×6 para p = 1…24) | `entradas/caso_base/` (K7, 36 k-points) con `NELM = 4`, como la A.2 |
+| Cómo crece el problema | Cada proceso calcula 3 k-points con las 144 bandas: el trabajo por proceso es fijo | — (24 núcleos fijos) |
+| Procesos e hilos | p procesos MPI, p = 1, 2, 4, 8, 12, 16, 24; núcleos y `srun` como en la A.1 | 24 núcleos pedidos como en la A.1; paso de `srun` con N procesos × T hilos: (24,1) (12,2) (8,3) (6,4) (4,6) (2,12) (1,24), elegido por su máscara real (cada proceso con T núcleos físicos propios); `OMP_PLACES=cores`, `OMP_PROC_BIND=close` |
+| Métrica | Ew(p) = t(1)/t(p), de la corrida y por iteración SCF (el número de iteraciones cambia con la malla) | t, S = t(1)/t con t(1) = p = 1 de la A.2 (misma carga), E = S/24 |
+| Memoria | VmHWM de cada proceso cada 3 s: máximo por proceso y suma | Igual; para las corridas de la A.2 (1 proceso) se usa el OUTCAR |
+| Repeticiones | 3 por p (21 corridas) | 3 por combinación (18) y 1 nueva de (1,24), que suma las 3 de la A.2 |
+| Orden | Una sola cadena con B.1 y B.2 intercaladas por repetición, en orden distinto en cada una | |
+| Entorno | `OPENBLAS_NUM_THREADS=1` en todas (en la A.2 no cambió el tiempo) | |
+| Costo estimado | unas 17 h‑núcleo | unas 22 h‑núcleo |
+| Verificaciones | Afinidad, SCF convergido, NKPTS = 3p, KPAR = p, p procesos | Afinidad (N procesos × T núcleos físicos, sin compartir), hilos en N×T núcleos, VASP con N procesos y T hilos, 4 iteraciones; procesos repartidos en los 2 sockets (B.3) |
+
+```bash
+bash slurm/parteBC_preparar.sh                   # genera entradas/debil/ y entradas/encut/, verifica y guarda en Git
+bash slurm/parteB_enviar.sh                      # 40 corridas en una cadena
+bash slurm/parteC_enviar.sh                      # C.2: 3 series de ENCUT, despues de la Parte B
+bash slurm/parteBC_estado.sh                     # seguimiento
+python3 analisis/parteB_resumen.py               # tablas B.1 y B.2, combinacion optima
+python3 analisis/parteB_resumen.py --guardar     # ademas copia la evidencia a datos/parteB/ y hace commit
+```
+
+---
+
+## 9. Tarea C.2: precisión frente a costo (ENCUT)
+
+| Decisión | Valor | Justificación |
+|---|---|---|
+| Parámetro | ENCUT = 250, 300, 350, 400, 450, 500, 550, 600, 700, 800 eV (`entradas/encut/`) | Controla el error de truncamiento de la base de ondas planas |
+| Referencia | ENCUT = 800 eV | Error de cada ENCUT: \|E(ENCUT) − E(800)\| por átomo |
+| Malla | Gamma 3×3×1 (3 k-points) | El error de la base por átomo casi no depende de la malla; con 3 k-points la serie cuesta unas 3 h‑núcleo con 3 repeticiones (con la malla del caso base costaría unas 12 veces más) |
+| Núcleos | 1 (como la p = 1 de la A.1), SCF completo | Tiempo de cómputo = horas‑núcleo |
+| Repeticiones | 3 series, un job de 1 núcleo por serie, en orden distinto cada una (ascendente, descendente, mezclado) | Barras de error del tiempo; solo 3 jobs en la cola |
+| Precisión simple | VASP 6.3.0 para CPU solo calcula en doble precisión | Se discute con ε_mach en la C.1 |
+
+---
+
+## 10. Historial
 
 El primer caso base (monocapa 3×3 con V_Se, ENCUT = 500 eV, calibrado el 2026-11-17) y las pruebas
 del entorno de Granado quedaron en la carpeta `examen_silvera_monocapa/`, con su propio historial de

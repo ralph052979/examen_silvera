@@ -1,0 +1,10 @@
+Escalamiento debil (Parte B.1): p procesos MPI, KPAR = p, 3 k-points irreducibles por proceso.
+Generado por slurm/parteBC_preparar.sh a partir de entradas/caso_base/.
+p malla nkpts_esperados
+1 3x3x1 3
+2 3x3x2 6
+4 5x5x3 12
+8 6x6x4 24
+12 10x10x3 36
+16 14x14x2 48
+24 10x10x6 72
