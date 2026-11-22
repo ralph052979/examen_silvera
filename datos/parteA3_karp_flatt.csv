@@ -1,0 +1,25 @@
+serie,p,e,e_desv
+MPI corrida,2,0.0875476,0.00154
+MPI corrida,4,0.0797319,0.00289
+MPI corrida,8,0.0880184,0.00137
+MPI corrida,12,0.101102,0.00241
+MPI corrida,16,0.120721,0.00219
+MPI corrida,24,0.117393,0.00333
+OpenMP corrida,2,0.611733,0.0203
+OpenMP corrida,4,0.628806,0.0183
+OpenMP corrida,8,0.696368,0.0128
+OpenMP corrida,12,0.839028,0.0125
+OpenMP corrida,16,0.865979,0.00807
+OpenMP corrida,24,1.09457,0.0108
+MPI por iteracion,2,0.0953502,0.0063
+MPI por iteracion,4,0.0793484,0.00405
+MPI por iteracion,8,0.0881631,0.00248
+MPI por iteracion,12,0.10021,0.00277
+MPI por iteracion,16,0.122047,0.00291
+MPI por iteracion,24,0.112019,0.00305
+OpenMP por iteracion,2,0.608363,0.0248
+OpenMP por iteracion,4,0.644112,0.0105
+OpenMP por iteracion,8,0.763453,0.0116
+OpenMP por iteracion,12,0.986638,0.016
+OpenMP por iteracion,16,1.0169,0.00782
+OpenMP por iteracion,24,1.37141,0.0123
