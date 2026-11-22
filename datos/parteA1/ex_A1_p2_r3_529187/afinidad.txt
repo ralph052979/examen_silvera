@@ -1,0 +1,7 @@
+tarea 1 mascara 0x2000000002 cpus_logicos 1 37 nucleos_fisicos=1
+tarea 0 mascara 0x1000000001 cpus_logicos 0 36 nucleos_fisicos=1
+afinidad_ok=1
+procesos_con_mascara=2
+nucleos_fisicos_distintos=2
+nucleos_compartidos=0
+nucleos_por_socket=s0:2

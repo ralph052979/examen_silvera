@@ -1,0 +1,12 @@
+caso=caso_base
+job_id=529185
+job_name=ex_A1_p4_r3
+nodo=granado-compute-14.granado.uninorte.edu.co
+cpu=Intel(R) Xeon(R) Gold 6140 CPU @ 2.30GHz
+particion=phys_fast
+ntasks=4
+cpus_per_task=1
+omp_num_threads=1
+git_hash=f3c1dcd
+vasp_bin=/opt/ohpc/pub/apps/vasp/vasp.6.3.0/bin-gnu9-openmp/vasp_std
+fecha_inicio=2026-11-22 01:50:31

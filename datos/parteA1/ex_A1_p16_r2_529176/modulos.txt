@@ -1,0 +1,10 @@
+
+Currently Loaded Modules:
+  1) gnu9/9.3.0             6) fftw/3.3.8-gnu9
+  2) openmpi4/4.1.2         7) wannier90/3.1.0-gnu9-openblas
+  3) openblas/0.3.17-gnu9   8) libevent/2.1.12
+  4) hdf5/1.10.6-gnu9       9) vasp/6.3.0-gnu9-openmp
+  5) scalapack/2.1.0
+
+ 
+

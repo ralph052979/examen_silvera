@@ -1,0 +1,16 @@
+fecha_fin=2026-11-21 23:51:08
+wall_s=290.811
+rc_srun=0
+ntasks=24
+cpus_per_task=1
+mascaras_distintas=24
+afinidad_ok=1
+nucleos_fisicos_distintos=24
+nucleos_compartidos=0
+nucleos_por_socket=s0:18,s1:6
+carga_ajena_max=0/72
+carga_ajena_media=0.0
+fin_normal_vasp=1
+convergido=1
+n_scf=18
+estado=OK
