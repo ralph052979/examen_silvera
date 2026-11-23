@@ -4,6 +4,7 @@
 **Curso:** Introducción a la Computación Científica
 **Clúster:** Granado-HPC (Slurm), particiones `phys_fast` y `phys_general`
 **Software:** VASP 6.3.0, módulo `vasp/6.3.0-gnu9-openmp`, binario `vasp_std`
+**Análisis:** Python 3.7.6, NumPy 1.20.3 y matplotlib 3.4.2 (el `python3` del login de Granado)
 
 **Reporte:** [`reporte/reporte.pdf`](reporte/reporte.pdf) (fuente `reporte/reporte.tex`). **Parte I:**
 [`teoria/parte1.md`](teoria/parte1.md).
@@ -20,7 +21,8 @@
 | C.1 | energías convergidas con p = 1…24: diferencias ≤ 2.6E-8 eV (7E5 ε_mach·\|E\|), 40 veces menos que EDIFF |
 | C.2 | ENCUT = 400 eV es el punto de rendimientos decrecientes (0.33 meV/átomo) |
 | D.1 | `phys_fast`, MPI puro, KPAR = 12 en 12 núcleos: 3.9 min y 0.79 h-núcleo por cálculo |
-| Consumo | 148.5 de 250 h-núcleo (`datos/parteD_tabla.md`, `datos/sacct_registro_examen.txt`) |
+| Consumo | 148.5 de 250 h-núcleo en los 166 jobs del examen (JobID ≥ 528789, desde el 17 de noviembre; `datos/parteD_tabla.md`) |
+| Registro de `sacct` | `datos/sacct_registro_examen.txt`, con el comando del enunciado. Como empieza el 7 de septiembre, incluye además 370 jobs de investigación anteriores al examen (11 683 h-núcleo) que **no** son del examen: ver `datos/sacct_registro_LEEME.md` |
 
 ---
 
@@ -178,6 +180,7 @@ examen_silvera/
     empaquetar_datos.sh             junta logs/, datos/, sacct y los archivos pequenos de corridas/ (sin POTCAR)
     finalizar.sh                    analisis final: corre los scripts de analisis/ y guarda todo en Git
     publicar.sh                     agrega a Git los archivos pequenos de corridas/ y sube el repositorio
+    notas_finales.sh                verifica y guarda la nota del registro de sacct; con una direccion, sube el repositorio
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
@@ -191,6 +194,8 @@ examen_silvera/
     parteD_colas.py                 Parte D: consumo por parte, espera en cola y costo por calculo (sacct)
     reporte_tablas.py               tablas del reporte (reporte/tablas/*.tex) a partir de datos/
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
+  datos/sacct_registro_examen.txt   registro de consumo con el comando del enunciado (desde el 2026-09-07)
+  datos/sacct_registro_LEEME.md     que jobs de ese registro son del examen (JobID >= 528789) y cuales no
   teoria/                           Parte I: parte1.md (desarrollo), parte1_calculos.py y su salida
   reporte/                          reporte.tex, reporte.pdf, figuras/ y tablas/ (las generan los scripts de analisis/)
   corridas/<job>_<id>/              de cada corrida, solo los archivos pequenos (tiempos, afinidad, hilos,
