@@ -158,6 +158,7 @@ examen_silvera/
     parteC_enviar.sh                Tarea C.2: 3 series de ENCUT, un job de 1 nucleo por serie (o --faltantes)
     parteC2_serie.sh                Tarea C.2: job que corre vasp_job.sh una vez por cada ENCUT de la serie
     parteBC_estado.sh               Partes B y C.2: estado de las corridas
+    empaquetar_datos.sh             junta logs/, datos/, sacct y los archivos pequenos de corridas/ (sin POTCAR)
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)

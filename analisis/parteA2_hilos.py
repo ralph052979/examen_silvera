@@ -286,7 +286,10 @@ def imprimir(filas, t_ref, t1, n1, conc, intento1):
         print("nucleos y sin hilos de mas. S por iteracion: S(4) = %s, S(24) = %s: OpenMP casi no acelera este caso."
               % ("-" if conc["S4"] is None else "%.2f" % conc["S4"], "-" if conc["S24"] is None else "%.2f" % conc["S24"]))
         print("El barrido usa E1 con una carga fija de 4 iteraciones SCF (el SCF completo costaria ~110 h-nucleo).")
-        print("Siguiente paso:  python3 analisis/parteA2_hilos.py --guardar   y despues   bash slurm/parteA2_enviar.sh")
+        if os.path.isfile(os.path.join(REPO, "logs", "jobs_A2.txt")):
+            print("(El barrido de la A.2 ya se envio y este diagnostico ya no pide ningun paso.)")
+        else:
+            print("Siguiente paso:  python3 analisis/parteA2_hilos.py --guardar   y despues   bash slurm/parteA2_enviar.sh")
     else:
         geo = [f for f in filas if (f.get("estado") or "").startswith("FALLA_geometria") and f.get("dir")]
         if geo:
