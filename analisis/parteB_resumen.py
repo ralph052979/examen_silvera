@@ -456,7 +456,7 @@ def escribir_csv(ruta, cols, filas):
                 if isinstance(v, bool):
                     v = int(v)
                 elif isinstance(v, float):
-                    v = "%.6g" % v if abs(v) < 1e5 else "%.10g" % v
+                    v = "%.12g" % v
                 fila.append("" if v is None else v)
             w.writerow(fila)
 

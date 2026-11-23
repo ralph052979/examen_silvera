@@ -1,0 +1,17 @@
+Problema 1 (b): f = 0.05
+  S(24)  = 1/(0.05 + 0.95/24) = 1/0.0895833 = 11.1628
+  S(inf) = 1/f = 20.0
+  E(24)  = S(24)/24 = 0.4651
+  Comparacion (c): Gustafson con la misma fraccion serial: S(24) = 24 - 0.05*23 = 22.85
+
+Problema 3: t(1) = 100 s, t(4) = 30 s, t(16) = 11 s, t(24) = 9 s
+  p       t (s)     S(p)     E(p)          Karp-Flatt e(p)
+  1       100.0   1.0000   1.0000                        -
+  4        30.0   3.3333   0.8333                   0.0667
+  16       11.0   9.0909   0.5682                   0.0507
+  24        9.0  11.1111   0.4630                   0.0504
+  Ajuste t(p) = a + b/p (minimos cuadrados): a = 5.416 s, b = 94.770 s  ->  f = a/(a + b) = 0.0541
+  Ajuste lineal 1/S - 1/p = f (1 - 1/p) (p > 1):            f = 0.0544
+  Con f = 0.0541, E(p) = 1/(f p + 1 - f) = 0.5 en p = (1 + f)/f = 19.5
+  Con f = 0.0544, E(p) = 1/(f p + 1 - f) = 0.5 en p = (1 + f)/f = 19.4
+  Entre los p medidos, E < 0.5 por primera vez en p = 24 (E(16) = 0.568, E(24) = 0.463)

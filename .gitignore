@@ -1,7 +1,11 @@
+# Licencia de VASP: el POTCAR no se publica (su identidad queda en entradas/POTCAR.titel y .sha256)
 POTCAR
+# Librerias copiadas del login (ver README, seccion Granado)
 lib/
+# Corridas y registros de Slurm (pesan mucho; la evidencia del caso base se copia a datos/)
 corridas/
 logs/
+# Archivos grandes de VASP
 WAVECAR
 CHGCAR
 CHG
@@ -9,6 +13,12 @@ vasprun.xml
 PROCAR
 DOSCAR
 EIGENVAL
+# Temporales
 *.swp
 __pycache__/
 *.pyc
+# Subproductos de LaTeX
+reporte/*.aux
+reporte/*.log
+reporte/*.out
+reporte/*.toc

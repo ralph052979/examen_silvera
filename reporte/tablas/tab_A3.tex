@@ -1,0 +1,12 @@
+\begin{tabular}{l rr r rrr rr}
+\toprule
+ & \multicolumn{3}{c}{Amdahl} & \multicolumn{3}{c}{con sobrecosto $c\,(p-1)$} & \multicolumn{2}{c}{Karp--Flatt $e(p)$} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-9}
+serie & $f$ & $\chi^2_\nu$ & $1/f$ & $f$ & $c$ & $p^{*}$ & $p=2$ & $p=24$ \\
+\midrule
+MPI, corrida & 0.095 $\pm$ 0.006 & 53 & 10.5 & 0.079 $\pm$ 0.006 & $1.9\times10^{-3}$ & 22.1 & 0.088 & 0.117 \\
+OpenMP, corrida & 0.852 $\pm$ 0.067 & 189 & 1.2 & 0.533 $\pm$ 0.031 & $2.3\times10^{-2}$ & 4.6 & 0.612 & 1.095 \\
+MPI, por iteración & 0.101 $\pm$ 0.006 & 24 & 9.9 & 0.080 $\pm$ 0.009 & $1.7\times10^{-3}$ & 23.3 & 0.095 & 0.112 \\
+OpenMP, por iteración & 0.935 $\pm$ 0.106 & 508 & 1.1 & 0.498 $\pm$ 0.038 & $3.5\times10^{-2}$ & 3.8 & 0.608 & 1.371 \\
+\bottomrule
+\end{tabular}

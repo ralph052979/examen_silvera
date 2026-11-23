@@ -5,6 +5,23 @@
 **Clúster:** Granado-HPC (Slurm), particiones `phys_fast` y `phys_general`
 **Software:** VASP 6.3.0, módulo `vasp/6.3.0-gnu9-openmp`, binario `vasp_std`
 
+**Reporte:** [`reporte/reporte.pdf`](reporte/reporte.pdf) (fuente `reporte/reporte.tex`). **Parte I:**
+[`teoria/parte1.md`](teoria/parte1.md).
+
+### Resultados principales
+
+| Tarea | Resultado |
+|---|---|
+| Caso base | WSe₂ bulk 2×2×1 con V_Se (23 átomos), ENCUT = 400 eV, 10×10×3 (36 k-points): t(1) = 31.2 min |
+| A.1 MPI | S(24) = 6.49 ± 0.13, E = 0.27; Amdahl f = 0.095, pero la fracción de Karp–Flatt crece de 0.08 a 0.12 |
+| A.2 OpenMP | S máxima 1.39 con 4 hilos; con 24 hilos, 0.92 (binario sin `fftlib`) |
+| B.1 débil | KPAR = p, 3 k-points por proceso: E_w(24) = 0.50, toda en el eigensolver (contención del nodo); memoria total ∝ p², pasa la QOS en p ≈ 29 |
+| B.2 híbrido | óptimo 24 × 1 (89 s); 12 × 2 es 3 % más lento con 40 % menos memoria |
+| C.1 | energías convergidas con p = 1…24: diferencias ≤ 2.6E-8 eV (7E5 ε_mach·\|E\|), 40 veces menos que EDIFF |
+| C.2 | ENCUT = 400 eV es el punto de rendimientos decrecientes (0.33 meV/átomo) |
+| D.1 | `phys_fast`, MPI puro, KPAR = 12 en 12 núcleos: 3.9 min y 0.79 h-núcleo por cálculo |
+| Consumo | 148.5 de 250 h-núcleo (`datos/parteD_tabla.md`, `datos/sacct_registro_examen.txt`) |
+
 ---
 
 ## 1. Sistema físico y caso base (Tarea 0)
@@ -159,6 +176,7 @@ examen_silvera/
     parteC2_serie.sh                Tarea C.2: job que corre vasp_job.sh una vez por cada ENCUT de la serie
     parteBC_estado.sh               Partes B y C.2: estado de las corridas
     empaquetar_datos.sh             junta logs/, datos/, sacct y los archivos pequenos de corridas/ (sin POTCAR)
+    finalizar.sh                    analisis final: corre los scripts de analisis/ y guarda todo en Git
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
@@ -167,9 +185,13 @@ examen_silvera/
     parteA2_resumen.py              Tarea A.2: t(p), S(p), E(p) y comparacion por iteracion con MPI (A.1)
     parteA3_graficas.py             Tarea A.3: figuras S(p) y E(p), ajustes de Amdahl y de Karp-Flatt
     parteB_resumen.py               Parte B: Ew(p) del escalamiento debil; t, S, E y memoria del hibrido
+    parteB_graficas.py              Parte B: figuras B1_debil y B2_hibrido, tiempo por rutina y modelo de memoria
+    parteC_analisis.py              Parte C: energias con p (C.1), demostracion de la reduccion, ENCUT (C.2)
+    parteD_colas.py                 Parte D: consumo por parte, espera en cola y costo por calculo (sacct)
+    reporte_tablas.py               tablas del reporte (reporte/tablas/*.tex) a partir de datos/
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
-  teoria/                           Parte I
-  reporte/                          fuentes .tex y PDF; figuras/ (las generan los scripts de analisis/)
+  teoria/                           Parte I: parte1.md (desarrollo), parte1_calculos.py y su salida
+  reporte/                          reporte.tex, reporte.pdf, figuras/ y tablas/ (las generan los scripts de analisis/)
   (fuera de Git: POTCAR, lib/, corridas/, logs/)
 ```
 
@@ -356,7 +378,43 @@ python3 analisis/parteB_resumen.py --guardar     # ademas copia la evidencia a d
 
 ---
 
-## 10. Historial
+## 10. Análisis final y reporte (A.3, B, C, D)
+
+Todo el análisis corre en el login con Python (sin VASP) a partir de `corridas/`, `logs/` y `datos/`:
+
+```bash
+bash slurm/finalizar.sh      # corre los scripts de abajo, verifica y guarda todo en Git
+```
+
+| Script | Escribe |
+|---|---|
+| `analisis/parteB_resumen.py` | `datos/parteB1_*.csv`, `parteB2_*.csv`, `parteB_tabla.md` |
+| `analisis/parteA3_graficas.py` | `reporte/figuras/A3_*.pdf/png`, `datos/parteA3_*` |
+| `analisis/parteB_graficas.py` | `reporte/figuras/B1_debil`, `B2_hibrido`, `datos/parteB1_rutinas.csv`, `parteB1_memoria.md` |
+| `analisis/parteC_analisis.py` | `reporte/figuras/C2_precision_costo`, `datos/parteC1_*.csv`, `parteC2_*.csv`, `parteC_tabla.md` |
+| `analisis/parteD_colas.py` | `datos/parteD_*.csv`, `parteD_tabla.md`; con `sacct`, `datos/sacct_colas.txt` y `datos/sacct_registro_examen.txt` (el comando del enunciado) |
+| `analisis/reporte_tablas.py` | `reporte/tablas/*.tex` (ningún número de las tablas del reporte se copia a mano) |
+| `teoria/parte1_calculos.py` | `teoria/parte1_salida.txt` |
+
+El reporte se compila desde `reporte/` con `pdflatex reporte.tex` (dos veces) o en Overleaf subiendo
+`reporte.tex`, `figuras/` y `tablas/`. Usa `lmodern`, `microtype`, `booktabs`, `adjustbox`, `caption`,
+`enumitem` y `hyperref`; si `babel` tiene español, lo usa.
+
+Decisiones del análisis:
+
+* **C.1** usa la última línea `DAV` del OSZICAR (12 cifras significativas, resolución 1E-9 eV) y expresa
+  las diferencias como |E(p) − E(1)| / (ε_mach |E(1)|), con ε_mach = 2⁻⁵². Compara también la energía
+  después de exactamente 4 iteraciones de todas las corridas de la A.1, la A.2 y la B.2 (depende solo del
+  número de procesos MPI) y muestra, con NumPy, el efecto del orden de una reducción en precisión simple y
+  doble (semilla fija).
+* **C.2** toma como referencia ENCUT = 800 eV y el error por átomo |E − E(800)| / 23; la serie usa la malla
+  3×3×1 (el error de la base casi no depende de la malla) y 1 núcleo, con 3 repeticiones.
+* **D** mide la espera en cola como `Start − Eligible` (en una cadena, `Eligible` es cuando termina el job
+  anterior) y el costo por cálculo como p·t del SCF completo del caso base.
+
+---
+
+## 11. Historial
 
 El primer caso base (monocapa 3×3 con V_Se, ENCUT = 500 eV, calibrado el 2026-11-17) y las pruebas
 del entorno de Granado quedaron en la carpeta `examen_silvera_monocapa/`, con su propio historial de

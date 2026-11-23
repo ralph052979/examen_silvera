@@ -1,0 +1,9 @@
+configuracion,nucleos,t_s,t_desv_s,h_nucleo,t_resultado_min
+"1 procesos MPI, KPAR = 1 (A.1)",1,1871.6,1.7,0.520,31.19
+"2 procesos MPI, KPAR = 1 (A.1)",2,1017.7,1.1,0.565,16.96
+"4 procesos MPI, KPAR = 1 (A.1)",4,579.8,4.0,0.644,9.66
+"8 procesos MPI, KPAR = 1 (A.1)",8,378.1,2.2,0.840,6.30
+"12 procesos MPI, KPAR = 1 (A.1)",12,329.4,4.1,1.098,5.49
+"16 procesos MPI, KPAR = 1 (A.1)",16,328.8,3.8,1.461,5.48
+"24 procesos MPI, KPAR = 1 (A.1)",24,288.5,6.0,1.924,4.81
+"12 procesos MPI, KPAR = 12 (B.1, malla del caso base)",12,235.8,0.3,0.786,3.93

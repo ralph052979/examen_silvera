@@ -139,7 +139,7 @@ def s_sobrecosto(p, f, c):
 # ----------------------------------------------------------------------------- figuras
 def estilo(plt):
     plt.rcParams.update({
-        "font.size": 9, "axes.titlesize": 9, "axes.labelsize": 9, "legend.fontsize": 8,
+        "font.family": "DejaVu Sans", "font.size": 9, "axes.titlesize": 9, "axes.labelsize": 9, "legend.fontsize": 8,
         "xtick.labelsize": 8, "ytick.labelsize": 8, "axes.edgecolor": EJE, "axes.linewidth": 0.8,
         "axes.labelcolor": TINTA, "xtick.color": TINTA2, "ytick.color": TINTA2, "text.color": TINTA,
         "grid.color": REJILLA, "grid.linewidth": 0.6, "axes.grid": True, "axes.axisbelow": True,

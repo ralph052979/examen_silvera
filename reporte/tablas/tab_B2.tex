@@ -1,0 +1,13 @@
+\begin{tabular}{c r r r r r r c}
+\toprule
+$N_\mathrm{MPI}\times N_\mathrm{OMP}$ & $n$ & $t$ (s) & s/iter. & $S=t(1)/t$ & mem./proceso (GB) & mem. total (GB) & 2 sockets \\
+\midrule
+24$\times$1 & 3 & 89.3 $\pm$ 1.3 & 14.3 & 6.62 $\pm$ 0.11 & 0.17 & 3.95 & 0 de 24 \\
+12$\times$2 & 3 & 92.0 $\pm$ 0.8 & 14.6 & 6.42 $\pm$ 0.08 & 0.20 & 2.36 & 0 de 12 \\
+8$\times$3 & 3 & 107.1 $\pm$ 0.4 & 17.1 & 5.51 $\pm$ 0.05 & 0.23 & 1.84 & 0 de 8 \\
+6$\times$4 & 3 & 123.9 $\pm$ 0.9 & 20.6 & 4.77 $\pm$ 0.05 & 0.27 & 1.62 & 1 de 6 \\
+4$\times$6 & 3 & 152.5 $\pm$ 1.6 & 25.8 & 3.87 $\pm$ 0.05 & 0.34 & 1.35 & 0 de 4 \\
+2$\times$12 & 3 & 311.0 $\pm$ 1.7 & 58.4 & 1.90 $\pm$ 0.02 & 0.56 & 1.11 & 1 de 2 \\
+1$\times$24 & 4 & 644.6 $\pm$ 2.2 & 129.5 & 0.92 $\pm$ 0.01 & 1.00 & 1.00 & 1 de 1 \\
+\bottomrule
+\end{tabular}
