@@ -1,0 +1,12 @@
+hint rc=0 cpus=0-1 logicos=2 nucleos=2 linea_mask=1 opciones=--ntasks=1 --cpus-per-task=2 --hint=nomultithread --cpu-bind=verbose
+    srun: Job step's --cpus-per-task value exceeds that of job (2 > 1). Job step may never run.
+    cpu-bind=MASK - granado-compute-14, task  0  0 [46566]: mask 0x3 set
+tpc rc=0 cpus=0,36 logicos=2 nucleos=1 linea_mask=1 opciones=--ntasks=1 --cpus-per-task=2 --threads-per-core=1 --cpu-bind=verbose,cores
+    srun: Job step's --cpus-per-task value exceeds that of job (2 > 1). Job step may never run.
+    cpu-bind=MASK - granado-compute-14, task  0  0 [46615]: mask 0x1000000001 set
+base rc=0 cpus=0,36 logicos=2 nucleos=1 linea_mask=1 opciones=--ntasks=1 --cpus-per-task=2 --cpu-bind=verbose,cores
+    srun: Job step's --cpus-per-task value exceeds that of job (2 > 1). Job step may never run.
+    cpu-bind=MASK - granado-compute-14, task  0  0 [46664]: mask 0x1000000001 set
+doble rc=1 cpus=ninguno logicos=0 nucleos=0 linea_mask=0 opciones=--ntasks=1 --cpus-per-task=4 --cpu-bind=verbose,cores
+    srun: Job step's --cpus-per-task value exceeds that of job (4 > 1). Job step may never run.
+    srun: error: Unable to create step for job 529283: More processors requested than permitted

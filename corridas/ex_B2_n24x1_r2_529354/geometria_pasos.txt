@@ -1,0 +1,18 @@
+hint rc=0 tareas=24 nucleos_min=1 nucleos_max=1 logicos_max=1 union=24 compartidos=0 cpus_tarea0=12 linea_mask=24 opciones=--ntasks=24 --cpus-per-task=1 --hint=nomultithread --cpu-bind=verbose
+    cpu-bind=MASK - granado-compute-14, task 18 18 [47597]: mask 0x1000 set
+    cpu-bind=MASK - granado-compute-14, task 19 19 [47598]: mask 0x2000 set
+    cpu-bind=MASK - granado-compute-14, task  3  3 [47582]: mask 0x80000 set
+    cpu-bind=MASK - granado-compute-14, task 10 10 [47589]: mask 0x20 set
+tpc rc=0 tareas=24 nucleos_min=1 nucleos_max=1 logicos_max=2 union=24 compartidos=0 cpus_tarea0=12,48 linea_mask=24 opciones=--ntasks=24 --cpus-per-task=1 --threads-per-core=1 --cpu-bind=verbose,cores
+    cpu-bind=MASK - granado-compute-14, task 18 18 [47653]: mask 0x1000000001000 set
+    cpu-bind=MASK - granado-compute-14, task 19 19 [47654]: mask 0x2000000002000 set
+    cpu-bind=MASK - granado-compute-14, task 16 16 [47651]: mask 0x400000000400 set
+    cpu-bind=MASK - granado-compute-14, task 20 20 [47655]: mask 0x4000000004000 set
+base rc=0 tareas=24 nucleos_min=1 nucleos_max=1 logicos_max=2 union=24 compartidos=0 cpus_tarea0=12,48 linea_mask=24 opciones=--ntasks=24 --cpus-per-task=1 --cpu-bind=verbose,cores
+    cpu-bind=MASK - granado-compute-14, task 18 18 [47709]: mask 0x1000000001000 set
+    cpu-bind=MASK - granado-compute-14, task 19 19 [47710]: mask 0x2000000002000 set
+    cpu-bind=MASK - granado-compute-14, task  4  4 [47695]: mask 0x4000000004 set
+    cpu-bind=MASK - granado-compute-14, task  5  5 [47696]: mask 0x100000000100000 set
+doble rc=1 tareas=0 nucleos_min=0 nucleos_max=0 logicos_max=0 union=0 compartidos=0 cpus_tarea0=ninguno linea_mask=0 opciones=--ntasks=24 --cpus-per-task=2 --cpu-bind=verbose,cores
+    srun: Job step's --cpus-per-task value exceeds that of job (2 > 1). Job step may never run.
+    srun: error: Unable to create step for job 529354: More processors requested than permitted

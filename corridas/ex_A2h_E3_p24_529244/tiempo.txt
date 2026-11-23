@@ -1,0 +1,1 @@
+estado=OMITIDA_el_job_529240_no_termino_OK_(FALLA_afinidad_(detenida_al_arrancar,_ver_afinidad.txt))

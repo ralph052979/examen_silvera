@@ -2,9 +2,24 @@
 POTCAR
 # Librerias copiadas del login (ver README, seccion Granado)
 lib/
-# Corridas y registros de Slurm (pesan mucho; la evidencia del caso base se copia a datos/)
-corridas/
-logs/
+# Corridas: de cada corrida solo se publican los archivos pequenos (entradas, tiempos, afinidad,
+# hilos, OSZICAR y OUTCAR), para que el analisis se pueda repetir desde un clon. El POTCAR y los
+# archivos grandes de VASP nunca se publican (ver abajo).
+corridas/*/*
+!corridas/*/tiempo.txt
+!corridas/*/entorno.txt
+!corridas/*/afinidad.txt
+!corridas/*/hilos.txt
+!corridas/*/progreso.txt
+!corridas/*/geometria_pasos.txt
+!corridas/*/carga.txt
+!corridas/*/INCAR
+!corridas/*/KPOINTS
+!corridas/*/OSZICAR
+!corridas/*/OUTCAR
+# Registros de Slurm: solo las listas de jobs de cada parte (no las salidas .out)
+logs/*
+!logs/jobs_*.txt
 # Archivos grandes de VASP
 WAVECAR
 CHGCAR

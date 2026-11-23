@@ -1,0 +1,12 @@
+tarea 1 mascara 0x3c0000 cpus_logicos 18 19 20 21 nucleos_fisicos=4 sockets=1
+tarea 0 mascara 0xf cpus_logicos 0 1 2 3 nucleos_fisicos=4 sockets=1
+tarea 2 mascara 0xf0 cpus_logicos 4 5 6 7 nucleos_fisicos=4 sockets=1
+tarea 4 mascara 0x3c00 cpus_logicos 10 11 12 13 nucleos_fisicos=4 sockets=1
+tarea 3 mascara 0xc00300 cpus_logicos 8 9 22 23 nucleos_fisicos=4 sockets=2
+tarea 5 mascara 0x3c000 cpus_logicos 14 15 16 17 nucleos_fisicos=4 sockets=1
+afinidad_ok=1
+procesos_con_mascara=6
+nucleos_fisicos_distintos=24
+nucleos_compartidos=0
+nucleos_por_socket=s0:18,s1:6
+procesos_en_2_sockets=1

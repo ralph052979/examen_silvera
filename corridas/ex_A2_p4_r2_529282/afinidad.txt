@@ -1,0 +1,6 @@
+tarea 0 mascara 0xf cpus_logicos 0 1 2 3 nucleos_fisicos=4
+afinidad_ok=1
+procesos_con_mascara=1
+nucleos_fisicos_distintos=4
+nucleos_compartidos=0
+nucleos_por_socket=s0:4

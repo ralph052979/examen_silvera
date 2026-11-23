@@ -177,6 +177,7 @@ examen_silvera/
     parteBC_estado.sh               Partes B y C.2: estado de las corridas
     empaquetar_datos.sh             junta logs/, datos/, sacct y los archivos pequenos de corridas/ (sin POTCAR)
     finalizar.sh                    analisis final: corre los scripts de analisis/ y guarda todo en Git
+    publicar.sh                     agrega a Git los archivos pequenos de corridas/ y sube el repositorio
   analisis/
     resumen_t0.py                   tiempos, memoria y verificaciones; elige y fija el caso base
     parteA1_resumen.py              Tarea A.1: t(p) con media y desviacion estandar, S(p), E(p)
@@ -192,7 +193,10 @@ examen_silvera/
   datos/                            CSV, tabla del caso base y evidencia de la corrida elegida
   teoria/                           Parte I: parte1.md (desarrollo), parte1_calculos.py y su salida
   reporte/                          reporte.tex, reporte.pdf, figuras/ y tablas/ (las generan los scripts de analisis/)
-  (fuera de Git: POTCAR, lib/, corridas/, logs/)
+  corridas/<job>_<id>/              de cada corrida, solo los archivos pequenos (tiempos, afinidad, hilos,
+                                    INCAR, KPOINTS, OSZICAR, OUTCAR): el analisis se repite desde un clon
+  logs/jobs_*.txt                   listas de jobs de cada parte (que corrida es que job)
+  (fuera de Git: POTCAR, lib/, archivos grandes de VASP y las salidas .out de Slurm)
 ```
 
 Cada carpeta `corridas/<job>_<id>/` guarda las entradas y sus md5 (`entradas.md5`), `entorno.txt`

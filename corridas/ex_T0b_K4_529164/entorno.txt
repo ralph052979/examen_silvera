@@ -1,0 +1,11 @@
+caso=K4
+job_id=529164
+job_name=ex_T0b_K4
+nodo=granado-compute-14.granado.uninorte.edu.co
+particion=phys_fast
+ntasks=1
+cpus_per_task=1
+omp_num_threads=1
+git_hash=265ac0b
+vasp_bin=/opt/ohpc/pub/apps/vasp/vasp.6.3.0/bin-gnu9-openmp/vasp_std
+fecha_inicio=2026-11-21 21:11:01

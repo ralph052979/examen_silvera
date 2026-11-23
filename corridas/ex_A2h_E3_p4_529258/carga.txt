@@ -1,0 +1,11 @@
+inicio 11:47:24 s0=0/36 s1=0/36 loadavg=2.58 2.22 1.18
+durante 11:48:26 s0=1/36 s1=0/36 loadavg=1.71 2.02 1.17
+durante 11:49:28 s0=1/36 s1=0/36 loadavg=1.39 1.87 1.17
+durante 11:50:30 s0=1/36 s1=0/36 loadavg=1.44 1.79 1.19
+durante 11:51:32 s0=1/36 s1=0/36 loadavg=1.63 1.79 1.23
+durante 11:52:34 s0=1/36 s1=0/36 loadavg=1.84 1.82 1.27
+durante 11:53:36 s0=1/36 s1=0/36 loadavg=2.36 1.95 1.35
+durante 11:54:39 s0=1/36 s1=0/36 loadavg=2.43 2.02 1.42
+durante 11:55:41 s0=1/36 s1=0/36 loadavg=1.48 1.82 1.39
+durante 11:56:43 s0=4/36 s1=0/36 loadavg=1.18 1.67 1.37
+fin 11:56:45 s0=0/36 s1=0/36 loadavg=1.08 1.65 1.36

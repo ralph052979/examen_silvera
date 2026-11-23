@@ -1,0 +1,32 @@
+SYSTEM = WSe2 bulk 2H 2x2x1 V_Se - Tarea C.2 ENCUT = 600 eV, malla 3x3x1
+
+# ---------- Inicio desde cero (todas las corridas hacen el mismo trabajo) ----------
+ISTART = 0
+ICHARG = 2
+
+# ---------- Funcional y base de ondas planas ----------
+GGA    = PE
+PREC   = Normal
+ENCUT  = 600
+LREAL  = .FALSE.
+
+# ---------- Ciclo electronico: solo SCF ----------
+ALGO   = Normal
+EDIFF  = 1E-6
+NELM   = 100
+ISMEAR = 0
+SIGMA  = 0.05
+ISPIN  = 1
+NBANDS = 144
+
+# ---------- Sin relajacion ----------
+IBRION = -1
+NSW    = 0
+
+# ---------- Paralelismo de referencia (se cambia en las Partes A y B) ----------
+NCORE  = 1
+KPAR   = 1
+
+# ---------- Salida minima ----------
+LWAVE  = .FALSE.
+LCHARG = .FALSE.

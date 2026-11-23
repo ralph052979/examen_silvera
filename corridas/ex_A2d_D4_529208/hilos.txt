@@ -1,0 +1,3 @@
+hilos_muestras=0
+hilos_totales=0
+nucleos_fisicos_hilos=0

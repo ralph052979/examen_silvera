@@ -1,0 +1,6 @@
+inicio 21:14:25 cpus_ocupadas_nodo=4/72 cpus_ocupadas_socket=4/36 loadavg=4.75 2.46 1.01
+durante 21:19:27 cpus_ocupadas_nodo=4/72 cpus_ocupadas_socket=4/36 loadavg=4.98 4.05 2.11
+durante 21:24:29 cpus_ocupadas_nodo=5/72 cpus_ocupadas_socket=5/36 loadavg=5.00 4.65 2.91
+durante 21:29:31 cpus_ocupadas_nodo=3/72 cpus_ocupadas_socket=3/36 loadavg=3.26 4.05 3.16
+durante 21:34:33 cpus_ocupadas_nodo=2/72 cpus_ocupadas_socket=2/36 loadavg=2.03 2.86 2.91
+fin 21:38:24 cpus_ocupadas_nodo=1/72 cpus_ocupadas_socket=1/36 loadavg=2.00 2.40 2.71

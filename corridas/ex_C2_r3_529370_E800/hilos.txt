@@ -1,0 +1,12 @@
+hilos_muestras=61
+hilos_totales=3
+nucleos_fisicos_hilos=1
+hilos_intervalos=60
+hilos_activos_mediana=1
+hilos_activos_max=1
+uso_cpu_mediana=1.00
+uso_cpu_max=1.00
+sobresuscripcion=0
+mem_procesos_medidos=1
+mem_proceso_max_mb=476
+mem_total_mb=476

@@ -1,0 +1,8 @@
+fecha_fin=2026-11-21 21:38:24
+wall_s=1437.049
+rc_srun=0
+mascaras_distintas=1
+fin_normal_vasp=1
+convergido=1
+n_scf=18
+estado=OK
