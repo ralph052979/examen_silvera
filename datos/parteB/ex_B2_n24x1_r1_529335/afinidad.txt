@@ -1,0 +1,30 @@
+tarea 18 mascara 0x1000 cpus_logicos 12 nucleos_fisicos=1 sockets=1
+tarea 19 mascara 0x2000 cpus_logicos 13 nucleos_fisicos=1 sockets=1
+tarea 14 mascara 0x100 cpus_logicos 8 nucleos_fisicos=1 sockets=1
+tarea 16 mascara 0x400 cpus_logicos 10 nucleos_fisicos=1 sockets=1
+tarea 3 mascara 0x80000 cpus_logicos 19 nucleos_fisicos=1 sockets=1
+tarea 4 mascara 0x4 cpus_logicos 2 nucleos_fisicos=1 sockets=1
+tarea 12 mascara 0x40 cpus_logicos 6 nucleos_fisicos=1 sockets=1
+tarea 5 mascara 0x100000 cpus_logicos 20 nucleos_fisicos=1 sockets=1
+tarea 7 mascara 0x200000 cpus_logicos 21 nucleos_fisicos=1 sockets=1
+tarea 13 mascara 0x80 cpus_logicos 7 nucleos_fisicos=1 sockets=1
+tarea 6 mascara 0x8 cpus_logicos 3 nucleos_fisicos=1 sockets=1
+tarea 11 mascara 0x800000 cpus_logicos 23 nucleos_fisicos=1 sockets=1
+tarea 8 mascara 0x10 cpus_logicos 4 nucleos_fisicos=1 sockets=1
+tarea 15 mascara 0x200 cpus_logicos 9 nucleos_fisicos=1 sockets=1
+tarea 17 mascara 0x800 cpus_logicos 11 nucleos_fisicos=1 sockets=1
+tarea 9 mascara 0x400000 cpus_logicos 22 nucleos_fisicos=1 sockets=1
+tarea 10 mascara 0x20 cpus_logicos 5 nucleos_fisicos=1 sockets=1
+tarea 20 mascara 0x4000 cpus_logicos 14 nucleos_fisicos=1 sockets=1
+tarea 0 mascara 0x1 cpus_logicos 0 nucleos_fisicos=1 sockets=1
+tarea 1 mascara 0x40000 cpus_logicos 18 nucleos_fisicos=1 sockets=1
+tarea 2 mascara 0x2 cpus_logicos 1 nucleos_fisicos=1 sockets=1
+tarea 21 mascara 0x8000 cpus_logicos 15 nucleos_fisicos=1 sockets=1
+tarea 23 mascara 0x20000 cpus_logicos 17 nucleos_fisicos=1 sockets=1
+tarea 22 mascara 0x10000 cpus_logicos 16 nucleos_fisicos=1 sockets=1
+afinidad_ok=1
+procesos_con_mascara=24
+nucleos_fisicos_distintos=24
+nucleos_compartidos=0
+nucleos_por_socket=s0:18,s1:6
+procesos_en_2_sockets=0

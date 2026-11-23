@@ -1,0 +1,30 @@
+JobId=529329 JobName=ex_B1_p2_r1
+   UserId=rsilvera(1165) GroupId=rsilvera(1166) MCS_label=N/A
+   Priority=4294372943 Nice=0 Account=physics QOS=general
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   DerivedExitCode=0:0
+   RunTime=00:00:02 TimeLimit=00:30:00 TimeMin=N/A
+   SubmitTime=2026-11-22T17:19:24 EligibleTime=2026-11-22T17:22:18
+   AccrueTime=Unknown
+   StartTime=2026-11-22T17:22:18 EndTime=2026-11-22T17:52:18 Deadline=N/A
+   PreemptTime=None SuspendTime=None SecsPreSuspend=0
+   LastSchedEval=2026-11-22T17:22:18
+   Partition=phys_fast AllocNode:Sid=granado:67628
+   ReqNodeList=(null) ExcNodeList=granado-compute-18
+   NodeList=granado-compute-14
+   BatchHost=granado-compute-14
+   NumNodes=1 NumCPUs=2 NumTasks=2 CPUs/Task=1 ReqB:S:C:T=0:0:*:1
+   TRES=cpu=2,mem=6G,node=1,billing=2
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+     Nodes=granado-compute-14 CPU_IDs=0-3 Mem=6144 GRES_IDX=
+   MinCPUsNode=1 MinMemoryNode=6G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null)
+   Command=/work/physics/users/rsilvera/examen_silvera/slurm/vasp_job.sh
+   WorkDir=/work/physics/users/rsilvera/examen_silvera
+   StdErr=/work/physics/users/rsilvera/examen_silvera/logs/ex_B1_p2_r1_529329.out
+   StdIn=/dev/null
+   StdOut=/work/physics/users/rsilvera/examen_silvera/logs/ex_B1_p2_r1_529329.out
+   Power=
+

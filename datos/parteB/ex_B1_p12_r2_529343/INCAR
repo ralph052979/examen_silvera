@@ -1,0 +1,32 @@
+SYSTEM = WSe2 bulk 2H 2x2x1 V_Se - Parte B.1 escalamiento debil p = 12
+
+# ---------- Inicio desde cero (todas las corridas hacen el mismo trabajo) ----------
+ISTART = 0
+ICHARG = 2
+
+# ---------- Funcional y base de ondas planas ----------
+GGA    = PE
+PREC   = Normal
+ENCUT  = 400
+LREAL  = .FALSE.
+
+# ---------- Ciclo electronico: solo SCF ----------
+ALGO   = Normal
+EDIFF  = 1E-6
+NELM   = 100
+ISMEAR = 0
+SIGMA  = 0.05
+ISPIN  = 1
+NBANDS = 144
+
+# ---------- Sin relajacion ----------
+IBRION = -1
+NSW    = 0
+
+# ---------- Paralelismo de referencia (se cambia en las Partes A y B) ----------
+NCORE  = 1
+KPAR   = 12
+
+# ---------- Salida minima ----------
+LWAVE  = .FALSE.
+LCHARG = .FALSE.
