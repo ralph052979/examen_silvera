@@ -99,9 +99,11 @@ Estos hallazgos afectan a cualquier cálculo con VASP en Granado. `slurm/vasp_jo
    un comando de 1 s, cuatro formas de lanzar el paso (`--hint=nomultithread`, `--threads-per-core=1`,
    sin opciones y con 2p CPUs) y usa la primera cuya máscara **real** tiene p núcleos físicos
    (`geometria_pasos.txt`). Cada script de envío pasa sus opciones de forma explícita.
-2. **Lanzador MPI.** `srun` sin opciones falla con OpenMPI 4.1.2 (`OPAL ERROR … pmix3x`) y `mpirun`
-   ignora la asignación de Slurm (ata todos los procesos al núcleo 0). Se usa
-   `srun --mpi=pmix --cpu-bind=verbose,cores`. Los avisos `PMIX ERROR: BAD-PARAM` son inofensivos;
+2. **Lanzador MPI.** `srun` sin opciones falla con OpenMPI 4.1.2 (`OPAL ERROR … pmix3x`), y `mpirun`
+   sin `--map-by` ni `--bind-to` ignora la asignación de Slurm (ata todos los procesos al núcleo 0).
+   Se usa `srun --mpi=pmix --cpu-bind=verbose,cores`. La alternativa que indicó el docente,
+   `mpirun -np $SLURM_NTASKS --map-by slot:PE=$OMP_NUM_THREADS --bind-to core`, fija el mapeo de
+   forma explícita; no se usó en estas corridas. Los avisos `PMIX ERROR: BAD-PARAM` son inofensivos;
    **no** se fija `PMIX_MCA_gds`, porque rompe `MPI_Init`.
 3. **Librería FFTW.** Los nodos de cómputo no tienen `libfftw3_omp.so.3`. Se copia, junto con
    `libfftw3.so.3`, desde `/lib64` del login a `lib/`, y cada job la agrega a `LD_LIBRARY_PATH`.

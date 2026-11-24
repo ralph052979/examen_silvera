@@ -419,7 +419,9 @@ formación).
 \end{enumerate}
 
 \noindent Plantilla mínima (revisen la afinidad con \cod{--cpu-bind=verbose} en el archivo de salida; con
-\cod{mpirun}, OpenMPI ignora la asignación de Slurm y ata todos los procesos al núcleo~0):
+\cod{mpirun} sin \cod{--map-by} ni \cod{--bind-to}, OpenMPI ignora la asignación de Slurm y ata todos los
+procesos al núcleo~0; si se prefiere \cod{mpirun}, va con \cod{--map-by slot:PE=N --bind-to core}, como
+indicó el docente):
 {\small
 \begin{verbatim}
 #!/bin/bash
